@@ -4,11 +4,11 @@ Cyber threat intelligence fusion platform: OSINT ingestion (NVD, CISA KEV, ATT&C
 
 ## Commands
 
-- `uv sync` — install deps (Python 3.12+, uv-managed venv)
-- `make check` — ruff lint + format check, mypy (strict), pytest. Run before every commit.
+- Conda env `sentinel` (Python 3.12): `make env` once, then `conda activate sentinel` + `make install` (pip, `requirements*.txt`). Deps are declared in `requirements.txt` / `requirements-dev.txt` — keep `pyproject.toml` dependency lists in sync, and refreeze the pinned lock after changes: `pip freeze --exclude-editable > requirements.lock` (CI and Docker install from the lock).
+- `make check` — ruff lint + format check, mypy (strict), pytest. Run before every commit, inside the activated env.
 - `make up` / `make down` — Postgres + MLflow via Docker Compose, then Alembic migration
 - `make ingest` — run the OSINT ingestion Prefect flow locally
-- `uv run alembic revision -m "..."` / `upgrade head` — migrations live in `migrations/versions/`
+- `alembic revision -m "..."` / `alembic upgrade head` — migrations live in `migrations/versions/`
 
 ## Layout
 

@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(git -C /Users/jayden/Documents/sentinel branch -a)",
+      "Bash(git rm *)",
+      "Bash(conda create *)",
+      "Read(//opt/homebrew/Caskroom/miniconda/base/bin/**)",
+      "Read(//Users/jayden/**)",
+      "Bash(~/anaconda3/bin/conda create *)",
+      "Bash(~/anaconda3/bin/conda run *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'Switch to conda env + pip with pinned lockfile, drop week-based naming *)"
     ]
   }
 }

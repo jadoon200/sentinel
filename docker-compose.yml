@@ -19,7 +19,7 @@ services:
 
   migrate:
     build: .
-    command: ["uv", "run", "alembic", "upgrade", "head"]
+    command: ["alembic", "upgrade", "head"]
     environment:
       SENTINEL_DATABASE_URL: postgresql+psycopg://sentinel:sentinel@db:5432/sentinel
     depends_on:
@@ -28,7 +28,7 @@ services:
 
   ingest:
     build: .
-    command: ["uv", "run", "python", "-m", "sentinel.ingest.flows"]
+    command: ["python", "-m", "sentinel.ingest.flows"]
     environment:
       SENTINEL_DATABASE_URL: postgresql+psycopg://sentinel:sentinel@db:5432/sentinel
       SENTINEL_NVD_API_KEY: ${SENTINEL_NVD_API_KEY:-}

@@ -7,6 +7,7 @@ Prefect server: `python -m sentinel.ingest.flows`.
 from prefect import flow, task
 
 from sentinel.db.base import session_scope
+from sentinel.ingest.attack import fetch_attack_techniques
 from sentinel.ingest.kev import fetch_kev_catalog
 from sentinel.ingest.nvd import fetch_recent_cves
 from sentinel.logging import configure_logging, get_logger
@@ -35,11 +36,22 @@ def ingest_kev() -> int:
     return len(entries)
 
 
+@task(retries=2, retry_delay_seconds=60)
+def ingest_attack() -> int:
+    techniques = fetch_attack_techniques()
+    with session_scope() as session:
+        for technique in techniques:
+            session.merge(technique)
+    log.info("attack_ingest_complete", count=len(techniques))
+    return len(techniques)
+
+
 @flow(name="osint-ingestion")
 def osint_ingestion_flow(nvd_window_days: int = 7) -> dict[str, int]:
     return {
         "nvd": ingest_nvd(nvd_window_days),
         "kev": ingest_kev(),
+        "attack": ingest_attack(),
     }
 
 

@@ -1,4 +1,4 @@
-.PHONY: env install lint typecheck test check up down ingest migrate
+.PHONY: env install lock lint typecheck test check up down ingest migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -7,6 +7,11 @@ env:
 # Run inside the activated sentinel env
 install:
 	pip install -r requirements-dev.txt && pip install -e .
+
+# Refreeze the pinned lock (CI and Docker install from it)
+lock:
+	printf -- '--extra-index-url https://download.pytorch.org/whl/cpu\n\n' > requirements.lock
+	pip freeze --exclude-editable >> requirements.lock
 
 lint:
 	ruff check . && ruff format --check .

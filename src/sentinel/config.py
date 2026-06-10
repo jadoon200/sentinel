@@ -17,6 +17,15 @@ class Settings(BaseSettings):
         "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
     )
 
+    attack_stix_url: str = (
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data"
+        "/master/enterprise-attack/enterprise-attack.json"
+    )
+
+    # NLP technique mapping (free local models, HuggingFace)
+    nlp_bi_encoder_model: str = "cisco-ai/SecureBERT2.0-biencoder"
+    nlp_cross_encoder_model: str = "cisco-ai/SecureBERT2.0-cross_encoder"
+
     http_timeout_seconds: float = 30.0
 
 

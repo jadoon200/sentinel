@@ -10,7 +10,9 @@
       "Bash(~/anaconda3/bin/conda create *)",
       "Bash(~/anaconda3/bin/conda run *)",
       "Bash(git add *)",
-      "Bash(git commit -q -m 'Switch to conda env + pip with pinned lockfile, drop week-based naming *)"
+      "Bash(git commit -q -m 'Switch to conda env + pip with pinned lockfile, drop week-based naming *)",
+      "WebFetch(domain:arxiv.org)",
+      "Bash(git commit -q -m 'Ingest MITRE ATT&CK enterprise technique catalog *)"
     ]
   }
 }

@@ -1,12 +1,12 @@
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies first for layer caching
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+# Install pinned dependencies first for layer caching
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN pip install --no-cache-dir .
 
-CMD ["uv", "run", "python", "-m", "sentinel.ingest.flows"]
+CMD ["python", "-m", "sentinel.ingest.flows"]

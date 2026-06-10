@@ -12,7 +12,8 @@
       "Bash(git add *)",
       "Bash(git commit -q -m 'Switch to conda env + pip with pinned lockfile, drop week-based naming *)",
       "WebFetch(domain:arxiv.org)",
-      "Bash(git commit -q -m 'Ingest MITRE ATT&CK enterprise technique catalog *)"
+      "Bash(git commit -q -m 'Ingest MITRE ATT&CK enterprise technique catalog *)",
+      "Bash(git commit -q -m 'Add ATT&CK technique mapper: embedding retrieval + reranking *)"
     ]
   }
 }

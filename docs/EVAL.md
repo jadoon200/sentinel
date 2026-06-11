@@ -99,6 +99,36 @@ The three detectors cover different families, so the replay service runs all
 of them; per-family best: supervised (seen families ≈ 1.0), autoencoder
 (Infiltration 0.84, DDoS 0.71), sequence model (XSS 1.00, Brute Force 0.94).
 
+## Host-profile detector — fan-out statistics (no neural net)
+
+Follow-up to the sequence model's scan/beacon negative. Four explainable
+per-window statistics over each host's stream (unique dst ports, unique dst
+IPs, log flow rate, log mean packet count), robust-scaled on benign Mon–Wed
+windows, alerting on excess max robust-z. Destinations feed *counts* only —
+never raw feature values. Reproduce: `python -m sentinel.ids.profile`.
+
+| Metric | Value |
+|---|---|
+| PortScan recall | **0.998** (was 0.000 for every other detector) |
+| Nominal FPR | 12.1% |
+| FPR excluding host 192.168.10.8 | **1.15%** |
+| Bot recall | 0.000 (open — needs a periodicity signature) |
+
+The nominal FPR is not noise: **90% of the "false positives" trace to one
+host, 192.168.10.8, on Thursday** — the documented Infiltration victim, which
+port-scans the internal subnet after the meterpreter compromise. Those flows
+are labeled BENIGN in the corrected ground truth; the detector flags the
+victim's lateral scanning that the labels miss. With that host excluded the
+detector operates at its calibrated ~1% FPR. Diagnostic trail: threshold
+tightening (p99.9) and a tiny-flow side-condition both failed to move FPR
+(saturated windows are also small-flow), host attribution found the single
+responsible source.
+
+Bot/beacon traffic remains undetected by all four detectors: beacons are
+low-rate, single-destination, and hyper-regular — the opposite of fan-out.
+The right signature is periodicity (near-zero inter-arrival variance to a
+repeated destination), noted as future work.
+
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the
 autoencoder catches a meaningful share of families it has never seen — which

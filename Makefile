@@ -53,6 +53,10 @@ train-anomaly:
 train-sequence:
 	python -m sentinel.ids.sequence
 
+# Host-profile fan-out detector (per-window cardinality stats, no NN)
+train-profile:
+	python -m sentinel.ids.profile
+
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:
 	python -m sentinel.ids.replay

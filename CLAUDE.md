@@ -8,13 +8,17 @@ Cyber threat intelligence fusion platform: OSINT ingestion (NVD, CISA KEV, ATT&C
 - `make check` — ruff lint + format check, mypy (strict), pytest. Run before every commit, inside the activated env.
 - `make up` / `make down` — Postgres + MLflow via Docker Compose, then Alembic migration
 - `make ingest` — run the OSINT ingestion Prefect flow locally
+- `make enrich` — run the NLP enrichment Prefect flow (technique tagging + campaign correlation over ingested reports)
 - `alembic revision -m "..."` / `alembic upgrade head` — migrations live in `migrations/versions/`
 
 ## Layout
 
 - `src/sentinel/config.py` — pydantic-settings; all config via `SENTINEL_*` env vars / `.env`
 - `src/sentinel/db/` — SQLAlchemy 2.0 models (`models.py`), session helpers (`base.py`)
-- `src/sentinel/ingest/` — one module per source (`nvd.py`, `kev.py`), Prefect flows in `flows.py`
+- `src/sentinel/ingest/` — one module per source (`nvd.py`, `kev.py`, `attack.py`, `otx.py`, `rss.py`), Prefect flows in `flows.py`
+- `src/sentinel/nlp/` — ATT&CK technique mapper (`mapper.py`: SecureBERT 2.0 retrieval + cross-encoder rerank, embedding cache), report tagging pipeline (`tagging.py`)
+- `src/sentinel/correlate/` — CVE-mention extraction + campaign fusion (connected components of reports sharing CVEs, technique evidence aggregated across members)
+- `scripts/eval_mapper.py` + `docs/EVAL.md` — TRAM benchmark harness and recorded results for the technique mapper
 - `tests/` — pytest; HTTP mocked with respx; DB tests on in-memory SQLite (models use `JSON().with_variant(JSONB, "postgresql")` to stay SQLite-compatible)
 
 ## Workflow

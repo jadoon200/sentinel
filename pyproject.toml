@@ -77,7 +77,7 @@ follow_imports = "skip"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["sentinel.ids.anomaly_mlx"]
+module = ["sentinel.ids.anomaly_mlx", "sentinel.ids.sequence"]
 disallow_subclassing_any = false
 warn_return_any = false
 

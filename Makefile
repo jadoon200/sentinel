@@ -49,6 +49,10 @@ train:
 train-anomaly:
 	python -m sentinel.ids.anomaly
 
+# Sequence-level anomaly model over per-host flow streams (MLX, experimental)
+train-sequence:
+	python -m sentinel.ids.sequence
+
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:
 	python -m sentinel.ids.replay

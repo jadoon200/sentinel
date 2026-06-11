@@ -146,6 +146,36 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
         )
         taken += 1
 
+    # Third detector: per-host sequence model (MLX-only; covers web attacks
+    # the per-flow models miss — see docs/EVAL.md). Skipped where mlx is absent.
+    try:
+        from sentinel.ids.sequence import build_windows, train_sequence_model, window_scores
+    except ImportError:
+        build_windows = None  # type: ignore[assignment]
+    if build_windows is not None:
+        benign_seq_flows = flows.loc[benign_train.index].reset_index(drop=True)
+        seq_train, _ = build_windows(benign_seq_flows, scaler.transform(benign_train))
+        rng = np.random.default_rng(args.seed)
+        seq_holdout = rng.random(len(seq_train)) < 0.1
+        seq_model = train_sequence_model(seq_train[~seq_holdout], seed=args.seed)
+        seq_threshold = float(np.percentile(window_scores(seq_model, seq_train[seq_holdout]), 99.0))
+        test_seq_flows = flows.loc[x_test.index].reset_index(drop=True)
+        seq_test, last_pos = build_windows(test_seq_flows, scaler.transform(x_test))
+        seq_scores = window_scores(seq_model, seq_test)
+        seq_alerts = np.flatnonzero(seq_scores > seq_threshold)
+        for j in seq_alerts[np.argsort(-seq_scores[seq_alerts])][: args.max_alerts]:
+            i = int(last_pos[j])
+            alerts.append(
+                Alert(
+                    model="sequence",
+                    day=str(days_test.iloc[i]),
+                    score=float(seq_scores[j]),
+                    predicted_label=None,
+                    true_label=str(labels_test.iloc[i]),
+                    techniques=[],
+                )
+            )
+
     with session_scope() as session:
         # Alerts are a derived artifact of one replay pass — rebuild wholesale.
         session.execute(delete(Alert))
@@ -155,6 +185,7 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     counts = {
         "supervised_alerts": sum(a.model == "lightgbm-multiclass" for a in alerts),
         "anomaly_alerts": sum(a.model == "autoencoder" for a in alerts),
+        "sequence_alerts": sum(a.model == "sequence" for a in alerts),
     }
     print(counts)
     return counts

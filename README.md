@@ -2,7 +2,7 @@
 
 **Cyber threat intelligence fusion platform** — correlates open-source threat intelligence (OSINT) with ML-based network intrusion detection, the way real SOCs and intelligence fusion centres do.
 
-> 🚧 In progress — NLP technique mapping (SecureBERT 2.0 retrieval + reranking over the full ATT&CK catalog). See [docs/ROADMAP.md](docs/ROADMAP.md).
+> 🚧 OSINT ingestion + NLP technique mapping (SecureBERT 2.0 retrieval + reranking over the full ATT&CK catalog) + campaign correlation are done; ML intrusion-detection models (CIC-IDS2017) are next. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -42,8 +42,13 @@ make up
 # 3. run the OSINT ingestion flow (no API keys required)
 make ingest
 
-# 4. checks
+# 4. NLP technique tagging + campaign correlation over ingested reports
+make enrich
+
+# 5. checks
 make check
 ```
 
 Configuration via `.env` — see [.env.example](.env.example).
+
+The technique mapper is zero-shot (no training data); benchmarked against [TRAM](https://github.com/center-for-threat-informed-defense/tram), parent-level hit@5 = 0.58 retrieval-only / 0.66 with reranking — see [docs/EVAL.md](docs/EVAL.md).

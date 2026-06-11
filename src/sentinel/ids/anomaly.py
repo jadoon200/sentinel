@@ -87,7 +87,7 @@ def train_autoencoder(
             loss = loss_fn(model(batch), batch)
             loss.backward()
             optimizer.step()
-            epoch_loss += float(loss) * len(batch)
+            epoch_loss += float(loss.detach()) * len(batch)
         print(f"epoch {epoch + 1}/{epochs} mse={epoch_loss / len(data):.5f}")
     return model
 

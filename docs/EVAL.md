@@ -24,6 +24,36 @@ here on purpose: it motivates the anomaly-detection track and threshold
 calibration, and it's why SENTINEL reports temporal/cross-dataset numbers
 instead of headline AUCs.
 
+## Anomaly detector — benign-only autoencoder, same temporal split
+
+Torch MLP autoencoder trained on Mon–Wed **benign flows only** (no attack
+labels), alerting when reconstruction error exceeds the 99th percentile of
+held-out benign error. Reproduce: `python -m sentinel.ids.anomaly`. Tracked
+in MLflow (`ids-autoencoder`).
+
+Per-family recall on Thu–Fri attacks, side by side with the supervised
+baseline under the identical temporal split:
+
+| Attack family (unseen in training) | LightGBM @0.5 | Autoencoder @p99 |
+|---|---|---|
+| Infiltration | 0.000 | **0.844** |
+| DDoS | 0.001 | **0.705** |
+| Web Attack – XSS | 0.000 | **0.667** |
+| Web Attack – Brute Force | 0.000 | **0.477** |
+| Web Attack – SQL Injection | 0.000 | 0.000 |
+| Bot | 0.000 | 0.060 |
+| PortScan | 0.001 | 0.007 |
+| **Overall recall / FPR** | ~0.000 / 0.00% | **0.268** / 6.3% |
+
+The two models are complementary by construction: the supervised model is
+near-perfect on attack families it has seen (random-split table above), the
+autoencoder catches a meaningful share of families it has never seen — which
+is the scenario that matters for a fusion platform. Honest caveats, kept on
+purpose: observed FPR (6.3%) drifts above the calibrated 1% because Thu–Fri
+benign traffic differs from Mon–Wed benign traffic (distribution shift), and
+low-rate scans/botnet beacons reconstruct too well to alert (they look like
+small normal flows). Ensemble + campaign-context fusion is the next layer.
+
 # Technique mapper evaluation
 
 Zero-shot mapping of CTI sentences to ATT&CK techniques, evaluated against

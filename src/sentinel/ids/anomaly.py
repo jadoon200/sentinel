@@ -19,14 +19,14 @@ import torch
 from numpy.typing import NDArray
 from torch import nn
 
+from sentinel.config import get_settings
+from sentinel.ids.data import DAY_COLUMN, load_flows, make_xy
+from sentinel.ids.train import TRAIN_DAYS
+
 # All heavy compute runs on MPS; torch's CPU OpenMP pool deadlocks when
 # lightgbm's libomp is already loaded in the process (replay), so keep
 # torch CPU-side single-threaded — it costs nothing here.
 torch.set_num_threads(1)
-
-from sentinel.config import get_settings
-from sentinel.ids.data import DAY_COLUMN, load_flows, make_xy
-from sentinel.ids.train import TRAIN_DAYS
 
 
 def _device() -> torch.device:

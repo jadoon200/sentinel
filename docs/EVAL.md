@@ -45,6 +45,25 @@ baseline under the identical temporal split:
 | PortScan | 0.001 | 0.007 |
 | **Overall recall / FPR** | ~0.000 / 0.00% | **0.268** / 6.3% |
 
+### Backend: MLX vs torch-MPS (5 seeds, full benign Mon–Wed train set)
+
+The autoencoder has two interchangeable backends; the MLX port
+(`sentinel/ids/anomaly_mlx.py`, identical architecture/protocol) was adopted
+as the auto-selected default on Apple silicon after a 5-seed benchmark
+(`python scripts/bench_anomaly.py --seeds 5`):
+
+| backend | train (s) | score (s) | ROC-AUC | recall@p99 | FPR@p99 |
+|---|---|---|---|---|---|
+| torch-MPS | 4.30 ± 0.46 | 0.169 | 0.920 ± 0.006 | 0.252 ± 0.043 | 0.052 |
+| MLX | **1.18 ± 0.03** | **0.103** | 0.906 ± 0.009 | 0.248 ± 0.042 | 0.050 |
+
+Recall at the deployed operating point (p99 threshold) is statistically
+identical; training is 3.7× faster with far lower run-to-run variance. MLX
+also links no OpenMP, so it can share a process with LightGBM — the torch
+backend deadlocks there (duplicate libomp on macOS, in either import order),
+which repeatedly hung the replay service before the switch. torch remains the
+fallback (and the only backend on Linux CI/Docker).
+
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the
 autoencoder catches a meaningful share of families it has never seen — which

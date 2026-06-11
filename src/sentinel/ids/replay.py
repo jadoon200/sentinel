@@ -26,7 +26,7 @@ import pandas as pd
 
 from sentinel.config import get_settings
 from sentinel.ids.attack_map import techniques_for_label
-from sentinel.ids.data import DAY_COLUMN, load_flows, make_xy
+from sentinel.ids.data import DAY_COLUMN, FlowScaler, load_flows, make_xy
 from sentinel.ids.train import TRAIN_DAYS
 
 MULTICLASS_PARAMS: dict[str, Any] = {
@@ -81,8 +81,12 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     confidence = probabilities.max(axis=1)
     is_attack_prediction = (predicted != "BENIGN") & (confidence >= args.supervised_threshold)
 
-    # torch loads only after all LightGBM work is done (macOS libomp clash).
-    from sentinel.ids.anomaly import FlowScaler, reconstruction_errors, train_autoencoder
+    # Backend import deferred until all LightGBM work is done; MLX preferred
+    # (benchmark-backed, and immune to the macOS libomp clash with lightgbm).
+    from sentinel.ids.backends import select_anomaly_backend
+
+    backend, train_autoencoder, reconstruction_errors = select_anomaly_backend()
+    print(f"anomaly backend: {backend}")
 
     benign_train = x_train.loc[y_train == 0]
     holdout = benign_train.sample(frac=0.1, random_state=args.seed)

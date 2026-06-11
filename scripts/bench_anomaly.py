@@ -41,6 +41,7 @@ def main() -> None:
     parser.add_argument("--sample", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--seeds", type=int, default=1, help="seeds per backend (mean/std)")
     args = parser.parse_args()
 
     settings = get_settings()
@@ -61,44 +62,31 @@ def main() -> None:
     y = y_test.to_numpy()
     print(f"train {train_arr.shape}, test {test_arr.shape}\n")
 
-    results: dict[str, dict[str, Any]] = {}
-
-    # --- torch (MPS) ---
     from sentinel.ids.anomaly import reconstruction_errors, train_autoencoder
 
-    t0 = time.perf_counter()
-    torch_model = train_autoencoder(train_arr, epochs=args.epochs, seed=args.seed)
-    train_s = time.perf_counter() - t0
-    t0 = time.perf_counter()
-    hold_err = reconstruction_errors(torch_model, holdout_arr)
-    test_err = reconstruction_errors(torch_model, test_arr)
-    score_s = time.perf_counter() - t0
-    results["torch-mps"] = {
-        "train_s": train_s,
-        "score_s": score_s,
-        **evaluate(hold_err, test_err, y),
-    }
-
-    # --- mlx (Metal) ---
+    backends: dict[str, tuple[Any, Any]] = {"torch-mps": (train_autoencoder, reconstruction_errors)}
     try:
         from sentinel.ids.anomaly_mlx import reconstruction_errors_mlx, train_autoencoder_mlx
+
+        backends["mlx-metal"] = (train_autoencoder_mlx, reconstruction_errors_mlx)
     except ImportError:
         print("mlx not installed — torch results only")
-        _report(results)
-        return
 
-    t0 = time.perf_counter()
-    mlx_model = train_autoencoder_mlx(train_arr, epochs=args.epochs, seed=args.seed)
-    train_s = time.perf_counter() - t0
-    t0 = time.perf_counter()
-    hold_err = reconstruction_errors_mlx(mlx_model, holdout_arr)
-    test_err = reconstruction_errors_mlx(mlx_model, test_arr)
-    score_s = time.perf_counter() - t0
-    results["mlx-metal"] = {
-        "train_s": train_s,
-        "score_s": score_s,
-        **evaluate(hold_err, test_err, y),
-    }
+    seeds = [args.seed + i for i in range(args.seeds)]
+    results: dict[str, dict[str, Any]] = {}
+    for name, (train_fn, score_fn) in backends.items():
+        runs = []
+        for seed in seeds:
+            t0 = time.perf_counter()
+            model = train_fn(train_arr, epochs=args.epochs, seed=seed)
+            train_s = time.perf_counter() - t0
+            t0 = time.perf_counter()
+            hold_err = score_fn(model, holdout_arr)
+            test_err = score_fn(model, test_arr)
+            score_s = time.perf_counter() - t0
+            runs.append({"train_s": train_s, "score_s": score_s, **evaluate(hold_err, test_err, y)})
+        results[name] = {k: float(np.mean([r[k] for r in runs])) for k in runs[0]}
+        results[name + " (std)"] = {k: float(np.std([r[k] for r in runs])) for k in runs[0]}
 
     _report(results)
 

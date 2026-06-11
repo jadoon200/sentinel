@@ -79,3 +79,25 @@ def make_xy(
     features = features.apply(pd.to_numeric, errors="coerce")
     features = features.replace([np.inf, -np.inf], np.nan)
     return features, malicious.astype(int), labels
+
+
+class FlowScaler:
+    """Median-impute then robust-scale, fit on benign training flows only."""
+
+    def __init__(self) -> None:
+        self.median: NDArray[np.float64] | None = None
+        self.iqr: NDArray[np.float64] | None = None
+
+    def fit(self, features: pd.DataFrame) -> "FlowScaler":
+        values = features.to_numpy(dtype=np.float64)
+        self.median = np.nanmedian(values, axis=0)
+        q75, q25 = np.nanpercentile(values, [75, 25], axis=0)
+        self.iqr = np.where((q75 - q25) > 0, q75 - q25, 1.0)
+        return self
+
+    def transform(self, features: pd.DataFrame) -> NDArray[np.float32]:
+        assert self.median is not None and self.iqr is not None
+        values = features.to_numpy(dtype=np.float64)
+        values = np.where(np.isnan(values), self.median, values)
+        scaled = (values - self.median) / self.iqr
+        return np.clip(scaled, -10.0, 10.0).astype(np.float32)

@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -39,3 +39,7 @@ ingest:
 # Tag ingested reports with ATT&CK techniques (downloads models on first run)
 enrich:
 	python -m sentinel.ingest.flows enrich
+
+# Train the IDS baseline on corrected CIC-IDS2017 (data/cicids2017/)
+train:
+	python -m sentinel.ids.train

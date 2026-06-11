@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     nlp_tag_max_techniques: int = 5
     nlp_rerank_reports: bool = False
 
+    # IDS training (corrected CIC-IDS2017; local MLflow file store by default,
+    # point at http://localhost:5001 when the compose MLflow server is up)
+    ids_data_dir: Path = Path("data/cicids2017")
+    mlflow_tracking_uri: str = "file:./mlruns"
+
     http_timeout_seconds: float = 30.0
 
 

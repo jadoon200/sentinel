@@ -101,9 +101,22 @@ def tag_reports() -> int:
     return edges
 
 
+@task
+def correlate_campaigns() -> dict[str, int]:
+    from sentinel.correlate.campaigns import build_campaigns, link_report_cves
+
+    with session_scope() as session:
+        cve_edges = link_report_cves(session)
+        campaigns = build_campaigns(session)
+    log.info("correlation_complete", cve_edges=cve_edges, campaigns=campaigns)
+    return {"report_cve_edges": cve_edges, "campaigns": campaigns}
+
+
 @flow(name="nlp-enrichment")
 def nlp_enrichment_flow() -> dict[str, int]:
-    return {"report_technique_edges": tag_reports()}
+    edges = tag_reports()
+    correlation = correlate_campaigns()
+    return {"report_technique_edges": edges, **correlation}
 
 
 @flow(name="osint-ingestion")

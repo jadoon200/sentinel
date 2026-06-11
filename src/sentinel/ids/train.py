@@ -15,7 +15,12 @@ from sklearn.metrics import average_precision_score, f1_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 from sentinel.config import get_settings
-from sentinel.ids.data import AttemptedPolicy, load_flows, make_xy
+from sentinel.ids.data import DAY_COLUMN, AttemptedPolicy, load_flows, make_xy
+
+# Temporal split: train on the first three capture days, test on the last two.
+# Thursday/Friday attacks (web, infiltration, botnet, portscan, DDoS) are absent
+# from training, so this measures detection of unseen attack families.
+TRAIN_DAYS = ["Monday", "Tuesday", "Wednesday"]
 
 DEFAULT_PARAMS: dict[str, Any] = {
     "objective": "binary",
@@ -77,6 +82,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser.add_argument("--data-dir", type=Path, default=None)
     parser.add_argument("--sample", type=int, default=None)
     parser.add_argument("--attempted", choices=["drop", "benign", "malicious"], default="drop")
+    parser.add_argument("--split", choices=["random", "temporal"], default="random")
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
@@ -89,16 +95,21 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
 
     attempted: AttemptedPolicy = args.attempted
     flows = load_flows(args.data_dir or settings.ids_data_dir, sample=args.sample, seed=args.seed)
-    features, target, labels = make_xy(flows, attempted=attempted)
 
-    x_train, x_test, y_train, y_test, _, labels_test = train_test_split(
-        features,
-        target,
-        labels,
-        test_size=args.test_size,
-        random_state=args.seed,
-        stratify=target,
-    )
+    if args.split == "temporal":
+        in_train = flows[DAY_COLUMN].isin(TRAIN_DAYS)
+        x_train, y_train, _ = make_xy(flows.loc[in_train], attempted=attempted)
+        x_test, y_test, labels_test = make_xy(flows.loc[~in_train], attempted=attempted)
+    else:
+        features, target, labels = make_xy(flows, attempted=attempted)
+        x_train, x_test, y_train, y_test, _, labels_test = train_test_split(
+            features,
+            target,
+            labels,
+            test_size=args.test_size,
+            random_state=args.seed,
+            stratify=target,
+        )
     x_train, x_valid, y_train, y_valid = train_test_split(
         x_train, y_train, test_size=0.2, random_state=args.seed, stratify=y_train
     )
@@ -108,6 +119,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
             {
                 **DEFAULT_PARAMS,
                 "attempted_policy": attempted,
+                "split": args.split,
                 "sample": args.sample or "full",
                 "n_train": len(x_train),
                 "n_test": len(x_test),
@@ -116,7 +128,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
         model = train_lightgbm(x_train, y_train, x_valid, y_valid)
         metrics = evaluate(model, x_test, y_test, labels_test)
         mlflow.log_metrics(metrics)
-        mlflow.lightgbm.log_model(model, name="model")
+        mlflow.lightgbm.log_model(model, artifact_path="model")
 
     for key, value in sorted(metrics.items()):
         print(f"{key}: {value:.4f}")

@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 LABEL_COLUMN = "Label"
+DAY_COLUMN = "__day"  # capture day from the source filename for temporal splits
 
 # Identity / topology columns: trivially separable in the testbed, useless in
 # any other network. Both original and corrected header variants listed.
@@ -29,6 +30,7 @@ ID_COLUMNS = [
     "Destination Port",
     "Timestamp",
     "Attempted Category",
+    DAY_COLUMN,
 ]
 
 AttemptedPolicy = Literal["drop", "benign", "malicious"]
@@ -43,6 +45,7 @@ def load_flows(data_dir: Path, sample: int | None = None, seed: int = 13) -> pd.
     for path in files:
         frame = pd.read_csv(path, low_memory=False, skipinitialspace=True)
         frame.columns = frame.columns.str.strip()
+        frame[DAY_COLUMN] = path.stem.split("-")[0]
         frames.append(frame)
     flows = pd.concat(frames, ignore_index=True)
     if sample is not None and sample < len(flows):

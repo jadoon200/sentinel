@@ -1,3 +1,29 @@
+# Model evaluations
+
+## IDS baseline — LightGBM on corrected CIC-IDS2017
+
+Trained on the corrected dataset (Engelen et al., WTMC 2021 — >20% of original
+flows relabeled/fixed), "Attempted" flows dropped, identifier/topology columns
+(IPs, ports, timestamps) excluded to prevent testbed shortcut learning.
+Reproduce: `python -m sentinel.ids.train [--split temporal]`. Tracked in
+MLflow (`ids-lightgbm-baseline`).
+
+| Run | ROC-AUC | PR-AUC | F1 @0.5 | FPR |
+|---|---|---|---|---|
+| Random 80/20 split (full 2.2M flows) | 0.9998 | 0.9994 | 0.988 | 0.4% |
+| Temporal split (train Mon–Wed, test Thu–Fri) | 0.9895 | 0.972 | **0.001** | 0.00% |
+
+The random split looks near-perfect but per-class recall already shows cracks
+(XSS 0.20, Infiltration 0.88). The temporal split is the honest number: every
+Thu/Fri attack family (web attacks, infiltration, botnet, portscan, DDoS) is
+absent from training, and at the deployment threshold the classifier detects
+**none of them** — scores rank attacks above benign (ROC-AUC 0.99) but far
+below the threshold calibrated on seen attacks. This is exactly the
+within-dataset-inflation failure documented for NIDS literature, reproduced
+here on purpose: it motivates the anomaly-detection track and threshold
+calibration, and it's why SENTINEL reports temporal/cross-dataset numbers
+instead of headline AUCs.
+
 # Technique mapper evaluation
 
 Zero-shot mapping of CTI sentences to ATT&CK techniques, evaluated against

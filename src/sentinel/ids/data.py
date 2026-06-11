@@ -12,6 +12,7 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 LABEL_COLUMN = "Label"
 DAY_COLUMN = "__day"  # capture day from the source filename for temporal splits

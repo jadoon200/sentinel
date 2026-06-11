@@ -86,6 +86,54 @@ class ReportTechnique(Base):
     )
 
 
+class ReportCve(Base):
+    """A CVE identifier mentioned in a threat report (extracted by regex)."""
+
+    __tablename__ = "report_cves"
+
+    report_id: Mapped[str] = mapped_column(ForeignKey("threat_reports.report_id"), primary_key=True)
+    cve_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+
+
+class Campaign(Base):
+    """A cluster of reports linked by shared CVE mentions (derived, rebuilt each run)."""
+
+    __tablename__ = "campaigns"
+
+    campaign_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    cve_ids: Mapped[list[str]] = mapped_column(JsonType)
+    report_count: Mapped[int] = mapped_column(Integer())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+
+
+class CampaignReport(Base):
+    """Membership edge between a campaign and a threat report."""
+
+    __tablename__ = "campaign_reports"
+
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("campaigns.campaign_id"), primary_key=True)
+    report_id: Mapped[str] = mapped_column(ForeignKey("threat_reports.report_id"), primary_key=True)
+
+
+class CampaignTechnique(Base):
+    """Technique evidence fused across all reports of a campaign."""
+
+    __tablename__ = "campaign_techniques"
+
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("campaigns.campaign_id"), primary_key=True)
+    technique_id: Mapped[str] = mapped_column(
+        ForeignKey("attack_techniques.technique_id"), primary_key=True
+    )
+    corroborations: Mapped[int] = mapped_column(Integer())
+    score: Mapped[float] = mapped_column(Float())
+    method: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+
+
 class KevEntry(Base):
     """A CISA Known Exploited Vulnerabilities catalog entry."""
 

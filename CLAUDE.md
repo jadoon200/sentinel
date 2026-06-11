@@ -17,6 +17,12 @@ Cyber threat intelligence fusion platform: OSINT ingestion (NVD, CISA KEV, ATT&C
 - `src/sentinel/ingest/` — one module per source (`nvd.py`, `kev.py`), Prefect flows in `flows.py`
 - `tests/` — pytest; HTTP mocked with respx; DB tests on in-memory SQLite (models use `JSON().with_variant(JSONB, "postgresql")` to stay SQLite-compatible)
 
+## Workflow
+
+- Models: coding/implementation runs on Fable 5; documentation & context passes (CLAUDE.md, README, ROADMAP, EVAL, `.claude/` files) are delegated to an **Opus 4.8** subagent. Switch automatically — don't ask.
+- Push the feature branch regularly; when a MAJOR roadmap milestone completes, open a PR and merge to `main`.
+- On every milestone completion, refresh the affected docs (CLAUDE.md, README.md, docs/ROADMAP.md, docs/EVAL.md) so context stays current.
+
 ## Conventions
 
 - Branching: `main` is protected/deployable; work on `feat/<topic>` branches, merge via PR once the GitHub repo has CI.

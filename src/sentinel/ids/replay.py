@@ -13,9 +13,13 @@ Usage (inside the sentinel conda env, Postgres up via `make up`):
 """
 
 import argparse
+import os
 from pathlib import Path
 from typing import Any
 
+# torch and lightgbm both vendor libomp on macOS; running both in one process
+# deadlocks LightGBM's OpenMP pool without this (same workaround as tests).
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -58,11 +62,8 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
-    # Deferred: torch must not load before lightgbm (macOS libomp clash), and
-    # the DB session is only needed at persist time.
     from sentinel.db.base import session_scope
     from sentinel.db.models import Alert
-    from sentinel.ids.anomaly import FlowScaler, reconstruction_errors, train_autoencoder
 
     settings = get_settings()
     flows = load_flows(args.data_dir or settings.ids_data_dir, sample=args.sample, seed=args.seed)
@@ -77,6 +78,9 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     predicted = np.asarray(classes, dtype=object)[predicted_idx]
     confidence = probabilities.max(axis=1)
     is_attack_prediction = (predicted != "BENIGN") & (confidence >= args.supervised_threshold)
+
+    # torch loads only after all LightGBM work is done (macOS libomp clash).
+    from sentinel.ids.anomaly import FlowScaler, reconstruction_errors, train_autoencoder
 
     benign_train = x_train.loc[y_train == 0]
     holdout = benign_train.sample(frac=0.1, random_state=args.seed)

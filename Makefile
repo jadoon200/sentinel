@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -47,3 +47,7 @@ train:
 # Train the benign-only autoencoder anomaly detector (temporal split)
 train-anomaly:
 	python -m sentinel.ids.anomaly
+
+# Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
+replay:
+	python -m sentinel.ids.replay

@@ -134,6 +134,28 @@ class CampaignTechnique(Base):
     )
 
 
+class Alert(Base):
+    """An IDS detection from replaying flows through the trained models.
+
+    Techniques come from the predicted attack family via the curated CIC →
+    ATT&CK map (supervised model) or stay empty for pure anomaly alerts, so
+    alerts can be correlated with campaign/report technique evidence.
+    """
+
+    __tablename__ = "alerts"
+
+    alert_id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
+    model: Mapped[str] = mapped_column(String(32))  # "lightgbm-multiclass" | "autoencoder"
+    day: Mapped[str | None] = mapped_column(String(16))
+    score: Mapped[float] = mapped_column(Float())
+    predicted_label: Mapped[str | None] = mapped_column(String(64))
+    true_label: Mapped[str | None] = mapped_column(String(64))  # known in replay, null live
+    techniques: Mapped[list[str] | None] = mapped_column(JsonType)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+
+
 class KevEntry(Base):
     """A CISA Known Exploited Vulnerabilities catalog entry."""
 

@@ -45,6 +45,23 @@ def test_attack_map_normalizes_label_variants() -> None:
     assert techniques_for_label("something new") == []
 
 
+def test_train_multiclass_predicts_families_for_technique_tagging() -> None:
+    from sentinel.ids.replay import train_multiclass
+
+    rng = np.random.default_rng(13)
+    n = 300
+    family = pd.Series(rng.choice(["BENIGN", "PortScan", "SSH-Patator"], n)).astype(str)
+    offsets = family.map({"BENIGN": 0.0, "PortScan": 4.0, "SSH-Patator": -4.0}).to_numpy()
+    x = pd.DataFrame({"signal": offsets + rng.normal(0, 0.3, n), "noise": rng.normal(0, 1, n)})
+
+    booster, classes = train_multiclass(x, family, num_boost_round=30)
+    predicted_idx = np.asarray(booster.predict(x)).argmax(axis=1)
+    predicted = np.asarray(classes, dtype=object)[predicted_idx]
+
+    assert (predicted == family.to_numpy()).mean() > 0.95
+    assert techniques_for_label("PortScan") == ["T1046"]
+
+
 def test_train_and_evaluate_on_separable_data() -> None:
     rng = np.random.default_rng(13)
     n = 400

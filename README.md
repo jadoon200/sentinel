@@ -2,7 +2,7 @@
 
 **Cyber threat intelligence fusion platform** — correlates open-source threat intelligence (OSINT) with ML-based network intrusion detection, the way real SOCs and intelligence fusion centres do.
 
-> 🚧 In progress — OSINT ingestion pipeline (NVD + CISA KEV). See [docs/ROADMAP.md](docs/ROADMAP.md).
+> 🚧 In progress — NLP technique mapping (SecureBERT 2.0 retrieval + reranking over the full ATT&CK catalog). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 

@@ -13,7 +13,11 @@
       "Bash(git commit -q -m 'Switch to conda env + pip with pinned lockfile, drop week-based naming *)",
       "WebFetch(domain:arxiv.org)",
       "Bash(git commit -q -m 'Ingest MITRE ATT&CK enterprise technique catalog *)",
-      "Bash(git commit -q -m 'Add ATT&CK technique mapper: embedding retrieval + reranking *)"
+      "Bash(git commit -q -m 'Add ATT&CK technique mapper: embedding retrieval + reranking *)",
+      "Bash(HF_HUB_DISABLE_PROGRESS_BARS=1 ~/anaconda3/bin/conda run -n sentinel python /tmp/smoke_mapper.py)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/center-for-threat-informed-defense/tram/main/data/training/bootstrap-training-data.json\" -o /tmp/tram_bootstrap.json)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

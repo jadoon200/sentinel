@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay api migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -7,11 +7,12 @@ env:
 # Run inside the activated sentinel env
 install:
 	pip install -r requirements-dev.txt && pip install -e .
+	@[ "$$(uname)" = "Darwin" ] && pip install -r requirements-mlx.txt || true
 
 # Refreeze the pinned lock (CI and Docker install from it)
 lock:
 	printf -- '--extra-index-url https://download.pytorch.org/whl/cpu\n\n' > requirements.lock
-	pip freeze --exclude-editable >> requirements.lock
+	pip freeze --exclude-editable --exclude mlx --exclude mlx-metal >> requirements.lock
 
 lint:
 	ruff check . && ruff format --check .
@@ -39,3 +40,19 @@ ingest:
 # Tag ingested reports with ATT&CK techniques (downloads models on first run)
 enrich:
 	python -m sentinel.ingest.flows enrich
+
+# Train the IDS baseline on corrected CIC-IDS2017 (data/cicids2017/)
+train:
+	python -m sentinel.ids.train
+
+# Train the benign-only autoencoder anomaly detector (temporal split)
+train-anomaly:
+	python -m sentinel.ids.anomaly
+
+# Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
+replay:
+	python -m sentinel.ids.replay
+
+# Serve the read-only knowledge-graph API on :8000 (needs make up)
+api:
+	uvicorn sentinel.api.app:app --reload

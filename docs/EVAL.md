@@ -1,3 +1,78 @@
+# Model evaluations
+
+## IDS baseline — LightGBM on corrected CIC-IDS2017
+
+Trained on the corrected dataset (Engelen et al., WTMC 2021 — >20% of original
+flows relabeled/fixed), "Attempted" flows dropped, identifier/topology columns
+(IPs, ports, timestamps) excluded to prevent testbed shortcut learning.
+Reproduce: `python -m sentinel.ids.train [--split temporal]`. Tracked in
+MLflow (`ids-lightgbm-baseline`).
+
+| Run | ROC-AUC | PR-AUC | F1 @0.5 | FPR |
+|---|---|---|---|---|
+| Random 80/20 split (full 2.2M flows) | 0.9998 | 0.9994 | 0.988 | 0.4% |
+| Temporal split (train Mon–Wed, test Thu–Fri) | 0.9895 | 0.972 | **0.001** | 0.00% |
+
+The random split looks near-perfect but per-class recall already shows cracks
+(XSS 0.20, Infiltration 0.88). The temporal split is the honest number: every
+Thu/Fri attack family (web attacks, infiltration, botnet, portscan, DDoS) is
+absent from training, and at the deployment threshold the classifier detects
+**none of them** — scores rank attacks above benign (ROC-AUC 0.99) but far
+below the threshold calibrated on seen attacks. This is exactly the
+within-dataset-inflation failure documented for NIDS literature, reproduced
+here on purpose: it motivates the anomaly-detection track and threshold
+calibration, and it's why SENTINEL reports temporal/cross-dataset numbers
+instead of headline AUCs.
+
+## Anomaly detector — benign-only autoencoder, same temporal split
+
+Torch MLP autoencoder trained on Mon–Wed **benign flows only** (no attack
+labels), alerting when reconstruction error exceeds the 99th percentile of
+held-out benign error. Reproduce: `python -m sentinel.ids.anomaly`. Tracked
+in MLflow (`ids-autoencoder`).
+
+Per-family recall on Thu–Fri attacks, side by side with the supervised
+baseline under the identical temporal split:
+
+| Attack family (unseen in training) | LightGBM @0.5 | Autoencoder @p99 |
+|---|---|---|
+| Infiltration | 0.000 | **0.844** |
+| DDoS | 0.001 | **0.705** |
+| Web Attack – XSS | 0.000 | **0.667** |
+| Web Attack – Brute Force | 0.000 | **0.477** |
+| Web Attack – SQL Injection | 0.000 | 0.000 |
+| Bot | 0.000 | 0.060 |
+| PortScan | 0.001 | 0.007 |
+| **Overall recall / FPR** | ~0.000 / 0.00% | **0.268** / 6.3% |
+
+### Backend: MLX vs torch-MPS (5 seeds, full benign Mon–Wed train set)
+
+The autoencoder has two interchangeable backends; the MLX port
+(`sentinel/ids/anomaly_mlx.py`, identical architecture/protocol) was adopted
+as the auto-selected default on Apple silicon after a 5-seed benchmark
+(`python scripts/bench_anomaly.py --seeds 5`):
+
+| backend | train (s) | score (s) | ROC-AUC | recall@p99 | FPR@p99 |
+|---|---|---|---|---|---|
+| torch-MPS | 4.30 ± 0.46 | 0.169 | 0.920 ± 0.006 | 0.252 ± 0.043 | 0.052 |
+| MLX | **1.18 ± 0.03** | **0.103** | 0.906 ± 0.009 | 0.248 ± 0.042 | 0.050 |
+
+Recall at the deployed operating point (p99 threshold) is statistically
+identical; training is 3.7× faster with far lower run-to-run variance. MLX
+also links no OpenMP, so it can share a process with LightGBM — the torch
+backend deadlocks there (duplicate libomp on macOS, in either import order),
+which repeatedly hung the replay service before the switch. torch remains the
+fallback (and the only backend on Linux CI/Docker).
+
+The two models are complementary by construction: the supervised model is
+near-perfect on attack families it has seen (random-split table above), the
+autoencoder catches a meaningful share of families it has never seen — which
+is the scenario that matters for a fusion platform. Honest caveats, kept on
+purpose: observed FPR (6.3%) drifts above the calibrated 1% because Thu–Fri
+benign traffic differs from Mon–Wed benign traffic (distribution shift), and
+low-rate scans/botnet beacons reconstruct too well to alert (they look like
+small normal flows). Ensemble + campaign-context fusion is the next layer.
+
 # Technique mapper evaluation
 
 Zero-shot mapping of CTI sentences to ATT&CK techniques, evaluated against

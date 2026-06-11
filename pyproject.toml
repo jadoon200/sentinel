@@ -17,7 +17,17 @@ dependencies = [
     "tenacity>=8.3",
     "sentence-transformers>=3.0",
     "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "lightgbm>=4.3",
+    "scikit-learn>=1.5",
+    "mlflow>=2.22,<3",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
 ]
+
+[project.optional-dependencies]
+mlx = ["mlx>=0.31; sys_platform == 'darwin'"]
 
 [dependency-groups]
 dev = [
@@ -26,6 +36,7 @@ dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",
     "respx>=0.21",
+    "pandas-stubs>=2.2",
 ]
 
 [build-system]
@@ -53,6 +64,22 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["prefect.*"]
 follow_imports = "skip"
+
+# No type stubs published for these ML libraries.
+[[tool.mypy.overrides]]
+module = ["lightgbm.*", "mlflow.*", "sklearn.*"]
+ignore_missing_imports = true
+
+# mlx.nn ships incomplete typing — treat the whole package as untyped.
+[[tool.mypy.overrides]]
+module = ["mlx.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sentinel.ids.anomaly_mlx"]
+disallow_subclassing_any = false
+warn_return_any = false
 
 # Prefect decorators appear untyped because their imports are skipped above.
 [[tool.mypy.overrides]]

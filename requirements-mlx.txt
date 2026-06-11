@@ -1,0 +1,3 @@
+# Apple-silicon only: MLX backend for the IDS autoencoder (no OpenMP, Metal-native).
+# Not part of requirements.lock — linux CI/Docker run the torch backend.
+mlx>=0.31; sys_platform == "darwin"

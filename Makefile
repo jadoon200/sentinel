@@ -43,3 +43,7 @@ enrich:
 # Train the IDS baseline on corrected CIC-IDS2017 (data/cicids2017/)
 train:
 	python -m sentinel.ids.train
+
+# Train the benign-only autoencoder anomaly detector (temporal split)
+train-anomaly:
+	python -m sentinel.ids.anomaly

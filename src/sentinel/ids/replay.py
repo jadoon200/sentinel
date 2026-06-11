@@ -62,6 +62,8 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
+    from sqlalchemy import delete
+
     from sentinel.db.base import session_scope
     from sentinel.db.models import Alert
 
@@ -141,6 +143,8 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
         taken += 1
 
     with session_scope() as session:
+        # Alerts are a derived artifact of one replay pass — rebuild wholesale.
+        session.execute(delete(Alert))
         for alert in alerts:
             session.add(alert)
 

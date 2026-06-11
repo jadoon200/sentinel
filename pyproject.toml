@@ -26,6 +26,9 @@ dependencies = [
     "uvicorn>=0.30",
 ]
 
+[project.optional-dependencies]
+mlx = ["mlx>=0.31; sys_platform == 'darwin'"]
+
 [dependency-groups]
 dev = [
     "ruff>=0.6",
@@ -66,6 +69,17 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 module = ["lightgbm.*", "mlflow.*", "sklearn.*"]
 ignore_missing_imports = true
+
+# mlx.nn ships incomplete typing — treat the whole package as untyped.
+[[tool.mypy.overrides]]
+module = ["mlx.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sentinel.ids.anomaly_mlx"]
+disallow_subclassing_any = false
+warn_return_any = false
 
 # Prefect decorators appear untyped because their imports are skipped above.
 [[tool.mypy.overrides]]

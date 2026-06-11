@@ -7,11 +7,12 @@ env:
 # Run inside the activated sentinel env
 install:
 	pip install -r requirements-dev.txt && pip install -e .
+	@[ "$$(uname)" = "Darwin" ] && pip install -r requirements-mlx.txt || true
 
 # Refreeze the pinned lock (CI and Docker install from it)
 lock:
 	printf -- '--extra-index-url https://download.pytorch.org/whl/cpu\n\n' > requirements.lock
-	pip freeze --exclude-editable >> requirements.lock
+	pip freeze --exclude-editable --exclude mlx --exclude mlx-metal >> requirements.lock
 
 lint:
 	ruff check . && ruff format --check .

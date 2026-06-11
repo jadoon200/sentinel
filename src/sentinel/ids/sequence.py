@@ -58,10 +58,18 @@ def build_windows(
     windows = []
     last_positions = []
     for _, group in order.groupby("host", sort=False):
-        positions = group.sort_values("ts", kind="stable")["pos"].to_numpy()
+        ordered = group.sort_values("ts", kind="stable")
+        positions = ordered["pos"].to_numpy()
+        # Inter-arrival time within the host's stream: the canonical scan/beacon
+        # signature (microsecond gaps, fixed periodicity). log-compressed to the
+        # scale of the robust-scaled flow features. Leakage-free: relative, not
+        # absolute, time.
+        seconds = ordered["ts"].diff().dt.total_seconds().fillna(0.0).to_numpy()
+        delta_t = (np.log1p(np.clip(seconds, 0.0, None)) - 2.0).astype(np.float32)
         for start in range(0, len(positions) - window + 1, stride):
             idx = positions[start : start + window]
-            windows.append(features[idx])
+            stacked = np.concatenate([features[idx], delta_t[start : start + window, None]], axis=1)
+            windows.append(stacked)
             last_positions.append(idx[-1])
     if not windows:
         raise ValueError("no host stream is long enough for the window size")
@@ -145,6 +153,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser.add_argument("--stride", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--threshold-percentile", type=float, default=99.0)
+    parser.add_argument("--low-percentile", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
@@ -176,15 +185,17 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     print(f"train windows {fit_windows.shape}, holdout {int(holdout_mask.sum())}")
 
     model = train_sequence_model(fit_windows, epochs=args.epochs, seed=args.seed)
-    threshold = float(
-        np.percentile(window_scores(model, train_windows[holdout_mask]), args.threshold_percentile)
-    )
+    holdout_scores = window_scores(model, train_windows[holdout_mask])
+    threshold = float(np.percentile(holdout_scores, args.threshold_percentile))
+    # Hyper-regular attack traffic (scans, beacons) is MORE predictable than
+    # benign traffic, so suspiciously low error is alerted too (two-sided).
+    low_threshold = float(np.percentile(holdout_scores, args.low_percentile))
 
     test_flows = flows.loc[x_test.index].reset_index(drop=True)
     test_feats = scaler.transform(x_test)
     test_windows, last_pos = build_windows(test_flows, test_feats, args.window, args.stride)
     scores = window_scores(model, test_windows)
-    alerts = scores > threshold
+    alerts = (scores > threshold) | (scores < low_threshold)
 
     window_y = y_test.to_numpy()[last_pos]
     window_labels = labels_test.to_numpy()[last_pos]
@@ -207,6 +218,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
                 "epochs": args.epochs,
                 "threshold_percentile": args.threshold_percentile,
                 "threshold": threshold,
+                "low_threshold": low_threshold,
                 "n_train_windows": len(fit_windows),
                 "n_test_windows": len(test_windows),
             }

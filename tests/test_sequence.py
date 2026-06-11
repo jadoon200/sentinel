@@ -29,10 +29,12 @@ def test_build_windows_groups_per_host_in_time_order() -> None:
 
     windows, last_pos = build_windows(flows, features, window=4, stride=2)
 
-    assert windows.shape == (4, 4, 2)  # two hosts x two windows each
+    assert windows.shape == (4, 4, 3)  # two hosts x two windows each, +delta-t col
     for w in windows:
         assert len(np.unique(w[:, 0])) == 1  # never mixes hosts
         assert list(w[:, 1]) == sorted(w[:, 1])  # time-ordered steps
+    assert windows[0][0, 2] == -2.0  # host's stream opener: delta-t = log1p(0) - 2
+    assert abs(windows[0][1, 2] - (np.log1p(60.0) - 2.0)) < 1e-5  # 60s gap encoded
     # last flow of host 0's first window is its step-3 flow
     assert features[last_pos[0]].tolist() == [0.0, 3.0]
 

@@ -64,6 +64,41 @@ backend deadlocks there (duplicate libomp on macOS, in either import order),
 which repeatedly hung the replay service before the switch. torch remains the
 fallback (and the only backend on Linux CI/Docker).
 
+## Sequence model — per-host flow streams (MLX gated recurrence)
+
+Hypothesis: attacks whose individual flows look benign (port scans, bot
+beacons) are anomalous as a *sequence from one host*. An input-gated
+recurrent cell predicts each next flow from the host's preceding window
+(16 flows, benign Mon–Wed training only); window score = next-step
+prediction error. Reproduce: `python -m sentinel.ids.sequence`.
+
+Three iterations, all recorded (FPR ≈ 2%, window labeled by its last flow):
+
+| Family | error-only | + two-sided | + inter-arrival Δt |
+|---|---|---|---|
+| Web Attack – XSS | **1.000** | 1.000 | **1.000** |
+| Web Attack – Brute Force | **0.941** | 0.941 | 0.824 |
+| DDoS | 0.021 | 0.021 | **0.486** |
+| Infiltration | 0.333 | 0.333 | 0.333 |
+| PortScan / Bot / SQLi | 0.000 | 0.000 | 0.000 |
+
+Findings, kept honest:
+
+- **Genuine unique adds** over the per-flow autoencoder: XSS 1.00 (vs 0.67)
+  and Web Brute Force 0.82–0.94 (vs 0.48) — web attacks are sequence-irregular.
+- Per-host **inter-arrival time** (leakage-free: relative, not absolute)
+  raised DDoS from 0.02 to 0.49 — flood cadence is a timing signature.
+- **Negative result**: scans/beacons stayed at 0.000 across all three
+  variants. Their windows are *more predictable than benign traffic*
+  (ROC-AUC ≈ 0.42, i.e. inverted), and not even extreme on the low side —
+  prediction-error magnitude cannot represent "suspiciously machine-like".
+  Detecting them likely needs explicit fan-out/cardinality features
+  (distinct destination ports/hosts per window), noted as future work.
+
+The three detectors cover different families, so the replay service runs all
+of them; per-family best: supervised (seen families ≈ 1.0), autoencoder
+(Infiltration 0.84, DDoS 0.71), sequence model (XSS 1.00, Brute Force 0.94).
+
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the
 autoencoder catches a meaningful share of families it has never seen — which

@@ -7,8 +7,11 @@ from multiple texts (sentences, reports of one campaign) is corroborated with
 `aggregate_matches`.
 """
 
+import hashlib
+import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
@@ -68,6 +71,14 @@ def _normalize(matrix: NDArray[np.floating]) -> NDArray[np.floating]:
     return np.asarray(matrix / np.maximum(norms, 1e-12))
 
 
+def _embedding_cache_path(cache_dir: Path, model_name: str, docs: Sequence[TechniqueDoc]) -> Path:
+    digest = hashlib.sha256(model_name.encode())
+    for doc in docs:
+        digest.update(b"\x00")
+        digest.update(doc.text.encode())
+    return cache_dir / f"technique_embeddings-{digest.hexdigest()[:16]}.npz"
+
+
 class TechniqueMapper:
     """Retrieve (and optionally rerank) ATT&CK techniques for free text."""
 
@@ -76,19 +87,49 @@ class TechniqueMapper:
         docs: Sequence[TechniqueDoc],
         encoder: TextEncoder,
         reranker: PairScorer | None = None,
+        cache_dir: Path | None = None,
+        model_name: str | None = None,
     ) -> None:
         if not docs:
             raise ValueError("technique catalog is empty — run the ATT&CK ingester first")
+        if (cache_dir is None) != (model_name is None):
+            raise ValueError("cache_dir and model_name must be provided together")
         self._docs = list(docs)
         self._encoder = encoder
         self._reranker = reranker
         self._index: NDArray[np.floating] | None = None
+        self._cache_path = (
+            _embedding_cache_path(cache_dir, model_name, self._docs)
+            if cache_dir is not None and model_name is not None
+            else None
+        )
 
     def _ensure_index(self) -> NDArray[np.floating]:
         if self._index is None:
-            embeddings = self._encoder.encode([doc.text for doc in self._docs])
-            self._index = _normalize(np.asarray(embeddings))
+            embeddings = self._load_cached_embeddings()
+            if embeddings is None:
+                embeddings = np.asarray(self._encoder.encode([doc.text for doc in self._docs]))
+                self._save_embeddings(embeddings)
+            self._index = _normalize(embeddings)
         return self._index
+
+    def _load_cached_embeddings(self) -> NDArray[np.floating] | None:
+        if self._cache_path is None or not self._cache_path.exists():
+            return None
+        try:
+            with np.load(self._cache_path) as archive:
+                embeddings = np.asarray(archive["embeddings"])
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile):
+            return None
+        if embeddings.ndim != 2 or embeddings.shape[0] != len(self._docs):
+            return None
+        return embeddings
+
+    def _save_embeddings(self, embeddings: NDArray[np.floating]) -> None:
+        if self._cache_path is None:
+            return
+        self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(self._cache_path, embeddings=embeddings)
 
     def map_text(self, text: str, top_k: int = 5, candidates: int = 20) -> list[TechniqueMatch]:
         index = self._ensure_index()

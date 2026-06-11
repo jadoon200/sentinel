@@ -19,6 +19,7 @@ from typing import Any
 
 import httpx
 
+from sentinel.config import get_settings
 from sentinel.ingest.attack import fetch_attack_techniques
 from sentinel.nlp.encoders import BiEncoder, CrossEncoderScorer
 from sentinel.nlp.mapper import TechniqueMapper, technique_doc
@@ -57,8 +58,15 @@ def main() -> None:
 
     techniques = fetch_attack_techniques()
     docs = [technique_doc(t) for t in techniques]
+    settings = get_settings()
     reranker = CrossEncoderScorer() if args.rerank else None
-    mapper = TechniqueMapper(docs, encoder=BiEncoder(), reranker=reranker)
+    mapper = TechniqueMapper(
+        docs,
+        encoder=BiEncoder(),
+        reranker=reranker,
+        cache_dir=settings.nlp_embedding_cache_dir,
+        model_name=settings.nlp_bi_encoder_model,
+    )
 
     hits = {k: 0 for k in (1, 3, 5, 10)}
     parent_hits = {k: 0 for k in (1, 3, 5, 10)}

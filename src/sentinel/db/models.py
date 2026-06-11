@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +42,46 @@ class AttackTechnique(Base):
     url: Mapped[str | None] = mapped_column(String(255))
     stix_id: Mapped[str | None] = mapped_column(String(64))
     ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+
+
+class ThreatReport(Base):
+    """A CTI report/post from an OSINT source (OTX pulse, RSS item)."""
+
+    __tablename__ = "threat_reports"
+
+    report_id: Mapped[str] = mapped_column(String(255), primary_key=True)  # "<source>:<id>"
+    source: Mapped[str] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(Text())
+    summary: Mapped[str | None] = mapped_column(Text())
+    url: Mapped[str | None] = mapped_column(String(2048))
+    author: Mapped[str | None] = mapped_column(String(255))
+    published: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tags: Mapped[list[str] | None] = mapped_column(JsonType)
+    # Technique IDs asserted by the report author (OTX pulses) — kept separate
+    # from NLP-derived report_techniques edges so they can serve as gold labels.
+    attack_ids: Mapped[list[str] | None] = mapped_column(JsonType)
+    raw: Mapped[dict[str, Any] | None] = mapped_column(JsonType)
+    nlp_tagged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+
+
+class ReportTechnique(Base):
+    """NLP-derived edge between a threat report and an ATT&CK technique."""
+
+    __tablename__ = "report_techniques"
+
+    report_id: Mapped[str] = mapped_column(ForeignKey("threat_reports.report_id"), primary_key=True)
+    technique_id: Mapped[str] = mapped_column(
+        ForeignKey("attack_techniques.technique_id"), primary_key=True
+    )
+    score: Mapped[float] = mapped_column(Float())
+    corroborations: Mapped[int] = mapped_column(Integer())
+    method: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now().astimezone()
     )
 

@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -35,3 +35,7 @@ migrate:
 
 ingest:
 	python -m sentinel.ingest.flows
+
+# Tag ingested reports with ATT&CK techniques (downloads models on first run)
+enrich:
+	python -m sentinel.ingest.flows enrich

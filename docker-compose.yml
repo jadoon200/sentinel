@@ -36,6 +36,17 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  api:
+    build: .
+    command: ["uvicorn", "sentinel.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      SENTINEL_DATABASE_URL: postgresql+psycopg://sentinel:sentinel@db:5432/sentinel
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.22.0
     command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --artifacts-destination /mlflow/artifacts

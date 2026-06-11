@@ -50,12 +50,24 @@ def client() -> Iterator[TestClient]:
         )
         session.add(
             Alert(
+                alert_id=1,
                 model="lightgbm-multiclass",
                 day="Thursday",
                 score=0.97,
                 predicted_label="PortScan",
                 true_label="PortScan",
                 techniques=["T1046"],
+            )
+        )
+        session.add(
+            Alert(
+                alert_id=2,
+                model="lightgbm-multiclass",
+                day="Friday",
+                score=0.88,
+                predicted_label="Web Attack - Sql Injection",
+                true_label="Web Attack - Sql Injection",
+                techniques=["T1190"],
             )
         )
         session.commit()
@@ -77,7 +89,7 @@ def test_stats_counts_graph_entities(client: TestClient) -> None:
 
     assert stats["threat_reports"] == 1
     assert stats["campaigns"] == 1
-    assert stats["alerts"] == 1
+    assert stats["alerts"] == 2
 
 
 def test_campaign_detail_joins_reports_and_techniques(client: TestClient) -> None:
@@ -95,9 +107,19 @@ def test_campaign_detail_joins_reports_and_techniques(client: TestClient) -> Non
 def test_alerts_endpoint_filters_by_model(client: TestClient) -> None:
     alerts = client.get("/alerts", params={"model": "lightgbm-multiclass"}).json()
 
-    assert len(alerts) == 1
-    assert alerts[0]["techniques"] == ["T1046"]
+    assert len(alerts) == 2
+    assert alerts[0]["techniques"] == ["T1046"]  # highest score first
     assert client.get("/alerts", params={"model": "autoencoder"}).json() == []
+
+
+def test_alert_context_fuses_with_campaigns_via_techniques(client: TestClient) -> None:
+    with_match = client.get("/alerts/2/context").json()
+    assert with_match["matched_campaigns"][0]["campaign_id"] == "camp:1"
+    assert with_match["matched_campaigns"][0]["matched_techniques"] == ["T1190"]
+
+    no_match = client.get("/alerts/1/context").json()
+    assert no_match["matched_campaigns"] == []
+    assert client.get("/alerts/999/context").status_code == 404
 
 
 def test_technique_detail_counts_evidence(client: TestClient) -> None:
@@ -105,4 +127,4 @@ def test_technique_detail_counts_evidence(client: TestClient) -> None:
 
     assert body["report_count"] == 1
     assert body["campaign_count"] == 1
-    assert body["alert_count"] == 0
+    assert body["alert_count"] == 1  # alert 2 carries T1190

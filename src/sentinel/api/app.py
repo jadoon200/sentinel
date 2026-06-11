@@ -92,6 +92,18 @@ class AlertOut(BaseModel):
     techniques: list[str]
 
 
+class CampaignMatch(BaseModel):
+    campaign_id: str
+    cve_ids: list[str]
+    report_count: int
+    matched_techniques: list[str]
+
+
+class AlertContext(BaseModel):
+    alert: "AlertOut"
+    matched_campaigns: list[CampaignMatch]
+
+
 class TechniqueDetail(BaseModel):
     technique_id: str
     name: str
@@ -244,6 +256,55 @@ def list_alerts(
         )
         for a in session.scalars(query).all()
     ]
+
+
+@app.get("/alerts/{alert_id}/context")
+def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
+    """Fusion join: campaigns whose technique evidence overlaps this alert's techniques.
+
+    This is the platform's core correlation — an IDS detection gains threat-intel
+    context ("these techniques are active in campaign X reported last week").
+    """
+    alert = session.get(Alert, alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="alert not found")
+
+    alert_out = AlertOut(
+        alert_id=alert.alert_id,
+        model=alert.model,
+        day=alert.day,
+        score=alert.score,
+        predicted_label=alert.predicted_label,
+        true_label=alert.true_label,
+        techniques=alert.techniques or [],
+    )
+    if not alert.techniques:
+        return AlertContext(alert=alert_out, matched_campaigns=[])
+
+    edges = session.scalars(
+        select(CampaignTechnique).where(CampaignTechnique.technique_id.in_(alert.techniques))
+    ).all()
+    matched: dict[str, list[str]] = {}
+    for edge in edges:
+        matched.setdefault(edge.campaign_id, []).append(edge.technique_id)
+
+    campaigns = session.scalars(
+        select(Campaign)
+        .where(Campaign.campaign_id.in_(matched))
+        .order_by(Campaign.report_count.desc())
+    ).all()
+    return AlertContext(
+        alert=alert_out,
+        matched_campaigns=[
+            CampaignMatch(
+                campaign_id=c.campaign_id,
+                cve_ids=c.cve_ids,
+                report_count=c.report_count,
+                matched_techniques=sorted(matched[c.campaign_id]),
+            )
+            for c in campaigns
+        ],
+    )
 
 
 @app.get("/techniques/{technique_id}")

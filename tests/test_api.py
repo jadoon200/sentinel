@@ -14,6 +14,7 @@ from sentinel.db.models import (
     Campaign,
     CampaignReport,
     CampaignTechnique,
+    KevEntry,
     ReportTechnique,
     ThreatReport,
 )
@@ -37,7 +38,14 @@ def client() -> Iterator[TestClient]:
                 report_id="rss:a", technique_id="T1190", score=0.5, corroborations=3, method="t"
             )
         )
-        session.add(Campaign(campaign_id="camp:1", cve_ids=["CVE-2026-1111"], report_count=1))
+        session.add(
+            Campaign(
+                campaign_id="camp:1",
+                cve_ids=["CVE-2026-1111", "CVE-2026-2222"],
+                report_count=1,
+            )
+        )
+        session.add(KevEntry(cve_id="CVE-2026-1111", vendor_project="ExampleCorp"))
         session.add(CampaignReport(campaign_id="camp:1", report_id="rss:a"))
         session.add(
             CampaignTechnique(
@@ -97,7 +105,8 @@ def test_campaign_detail_joins_reports_and_techniques(client: TestClient) -> Non
 
     assert response.status_code == 200
     body = response.json()
-    assert body["cve_ids"] == ["CVE-2026-1111"]
+    assert body["cve_ids"] == ["CVE-2026-1111", "CVE-2026-2222"]
+    assert body["kev_cves"] == ["CVE-2026-1111"]  # only the KEV-listed one
     assert body["techniques"][0]["technique_id"] == "T1190"
     assert body["techniques"][0]["name"] == "Exploit Public-Facing App"
     assert body["reports"][0]["report_id"] == "rss:a"
@@ -115,6 +124,7 @@ def test_alerts_endpoint_filters_by_model(client: TestClient) -> None:
 def test_alert_context_fuses_with_campaigns_via_techniques(client: TestClient) -> None:
     with_match = client.get("/alerts/2/context").json()
     assert with_match["matched_campaigns"][0]["campaign_id"] == "camp:1"
+    assert with_match["matched_campaigns"][0]["kev_cves"] == ["CVE-2026-1111"]
     assert with_match["matched_campaigns"][0]["matched_techniques"] == ["T1190"]
 
     no_match = client.get("/alerts/1/context").json()

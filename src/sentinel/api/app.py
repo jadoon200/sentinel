@@ -65,6 +65,9 @@ class TechniqueEvidence(BaseModel):
 class CampaignSummary(BaseModel):
     campaign_id: str
     cve_ids: list[str]
+    # CVEs on the CISA Known Exploited Vulnerabilities catalog — the campaign
+    # involves vulnerabilities with confirmed exploitation in the wild.
+    kev_cves: list[str]
     report_count: int
     techniques: list[TechniqueEvidence]
 
@@ -95,6 +98,7 @@ class AlertOut(BaseModel):
 class CampaignMatch(BaseModel):
     campaign_id: str
     cve_ids: list[str]
+    kev_cves: list[str]
     report_count: int
     matched_techniques: list[str]
 
@@ -123,6 +127,13 @@ def _technique_names(session: Session, technique_ids: set[str]) -> dict[str, str
         )
     )
     return {technique_id: name for technique_id, name in rows}
+
+
+def _kev_overlap(session: Session, cve_ids: list[str]) -> list[str]:
+    if not cve_ids:
+        return []
+    rows = session.scalars(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(cve_ids)))
+    return sorted(rows)
 
 
 def _campaign_techniques(session: Session, campaign_id: str) -> list[TechniqueEvidence]:
@@ -196,6 +207,7 @@ def list_campaigns(session: SessionDep) -> list[CampaignSummary]:
         CampaignSummary(
             campaign_id=c.campaign_id,
             cve_ids=c.cve_ids,
+            kev_cves=_kev_overlap(session, c.cve_ids),
             report_count=c.report_count,
             techniques=_campaign_techniques(session, c.campaign_id),
         )
@@ -217,6 +229,7 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> CampaignDetail:
     return CampaignDetail(
         campaign_id=campaign.campaign_id,
         cve_ids=campaign.cve_ids,
+        kev_cves=_kev_overlap(session, campaign.cve_ids),
         report_count=campaign.report_count,
         techniques=_campaign_techniques(session, campaign_id),
         reports=[_report_summary(session, r) for r in reports],
@@ -299,6 +312,7 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
             CampaignMatch(
                 campaign_id=c.campaign_id,
                 cve_ids=c.cve_ids,
+                kev_cves=_kev_overlap(session, c.cve_ids),
                 report_count=c.report_count,
                 matched_techniques=sorted(matched[c.campaign_id]),
             )

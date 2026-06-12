@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -64,6 +64,10 @@ ids-spectral:
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:
 	python -m sentinel.ids.replay
+
+# Print the auto-generated daily threat briefing (needs make up + make api)
+briefing:
+	curl -s localhost:8000/briefing
 
 # Serve the read-only knowledge-graph API on :8000 (needs make up)
 api:

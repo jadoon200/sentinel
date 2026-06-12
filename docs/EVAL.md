@@ -287,3 +287,18 @@ Findings:
 - Caveat recorded: folding non-alerting scores into the controller's memory
   tracks benign drift but can be self-poisoned by high-volume sub-threshold
   attacks; `adapt_memory=False` trades adaptivity for immunity.
+
+## Temporal intelligence analytics (CTI side)
+
+Three graph-derived analytics close the loop from raw ingestion to an analyst
+handoff, all computed from report timestamps with no extra storage:
+
+- **Trending techniques** (`/trending`): mention-rate lift, recent window vs
+  prior, +1-smoothed. On the live feed the Nx supply-chain story surfaces as
+  T1195.001 (Compromise Software Dependencies) at lift x8.
+- **Feed drift** (`/feed-drift`): Population Stability Index over the report
+  *source* mix — the CTI analogue of the IDS benign-drift the conformal
+  controller handles. The standard PSI bands (<0.1 stable, <0.25 moderate,
+  else significant) flag when feed composition shifts.
+- **Daily briefing** (`/briefing`): plain-text SOC handoff fusing trending
+  techniques, KEV-weighted campaign counts, and drift verdict.

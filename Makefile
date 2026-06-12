@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay api migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay api ui migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -64,3 +64,7 @@ replay:
 # Serve the read-only knowledge-graph API on :8000 (needs make up)
 api:
 	uvicorn sentinel.api.app:app --reload
+
+# React dashboard dev server on :5173 (needs make api in another shell)
+ui:
+	npm --prefix frontend install && npm --prefix frontend run dev

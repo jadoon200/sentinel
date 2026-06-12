@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,6 +34,14 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Read-only API; the Vite dev server and any local dashboard build may call it.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 
 def get_session() -> Iterator[Session]:
     session = get_session_factory()()
@@ -53,6 +62,7 @@ class Stats(BaseModel):
     report_technique_edges: int
     campaigns: int
     alerts: int
+    alerts_by_model: dict[str, int]
 
 
 class TechniqueEvidence(BaseModel):
@@ -197,6 +207,10 @@ def stats(session: SessionDep) -> Stats:
         report_technique_edges=count(ReportTechnique),
         campaigns=count(Campaign),
         alerts=count(Alert),
+        alerts_by_model={
+            model: n
+            for model, n in session.execute(select(Alert.model, func.count()).group_by(Alert.model))
+        },
     )
 
 
@@ -319,6 +333,20 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
             for c in campaigns
         ],
     )
+
+
+class TechniqueListItem(BaseModel):
+    technique_id: str
+    name: str
+    tactics: list[str]
+
+
+@app.get("/techniques")
+def list_techniques(session: SessionDep) -> list[TechniqueListItem]:
+    return [
+        TechniqueListItem(technique_id=t.technique_id, name=t.name, tactics=t.tactics or [])
+        for t in session.scalars(select(AttackTechnique))
+    ]
 
 
 @app.get("/techniques/{technique_id}")

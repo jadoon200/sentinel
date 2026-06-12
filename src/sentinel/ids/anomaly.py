@@ -29,7 +29,15 @@ torch.set_num_threads(1)
 
 
 def _device() -> torch.device:
-    return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    # MPS can report available but be unusable (CI VMs, broken Metal): probe
+    # with a real allocation before committing to it.
+    if torch.backends.mps.is_available():
+        try:
+            torch.zeros(1, device="mps")
+            return torch.device("mps")
+        except RuntimeError:
+            pass
+    return torch.device("cpu")
 
 
 class FlowAutoencoder(nn.Module):

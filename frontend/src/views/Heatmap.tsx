@@ -52,7 +52,16 @@ export function Heatmap() {
   return (
     <section className="panel">
       <h2>
-        ATT&CK heatmap — technique evidence fused across reports, campaigns, and IDS alerts
+        ATT&CK heatmap — technique evidence fused across reports, campaigns, and IDS alerts{" "}
+        <a
+          className="badge ok"
+          style={{ float: "right" }}
+          href={`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/attack-navigator-layer`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          export Navigator layer ↗
+        </a>
       </h2>
       {columns.length === 0 && <div className="muted">no technique evidence yet — run make enrich / make replay</div>}
       <div className="heat">

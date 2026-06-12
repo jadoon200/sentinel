@@ -146,3 +146,13 @@ def test_technique_detail_counts_evidence(client: TestClient) -> None:
     assert body["report_count"] == 1
     assert body["campaign_count"] == 1
     assert body["alert_count"] == 1  # alert 2 carries T1190
+
+
+def test_navigator_layer_export(client: TestClient) -> None:
+    layer = client.get("/attack-navigator-layer").json()
+
+    assert layer["domain"] == "enterprise-attack"
+    scores = {t["techniqueID"]: t["score"] for t in layer["techniques"]}
+    # T1190: one report edge + one campaign edge + one alert = 3
+    assert scores["T1190"] == 3
+    assert layer["gradient"]["maxValue"] == 3

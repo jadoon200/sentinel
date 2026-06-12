@@ -7,7 +7,7 @@ Run locally: `make api` (http://localhost:8000/docs).
 
 from collections.abc import Iterator
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -340,6 +340,46 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
             for c in campaigns
         ],
     )
+
+
+@app.get("/attack-navigator-layer")
+def attack_navigator_layer(session: SessionDep) -> dict[str, Any]:
+    """ATT&CK Navigator layer JSON — import into MITRE's Navigator directly.
+
+    Scores are evidence counts fused across tagged reports, campaign
+    aggregation, and IDS alerts (same fusion the dashboard heatmap shows).
+    """
+    evidence: dict[str, int] = {}
+
+    def bump(technique_id: str) -> None:
+        evidence[technique_id] = evidence.get(technique_id, 0) + 1
+
+    for technique_id in session.scalars(select(ReportTechnique.technique_id)):
+        bump(technique_id)
+    for technique_id in session.scalars(select(CampaignTechnique.technique_id)):
+        bump(technique_id)
+    for techniques in session.scalars(select(Alert.techniques)):
+        for technique_id in techniques or []:
+            bump(technique_id)
+
+    return {
+        "name": "SENTINEL technique evidence",
+        "versions": {"attack": "16", "navigator": "5.1.0", "layer": "4.5"},
+        "domain": "enterprise-attack",
+        "description": (
+            "Technique evidence fused across CTI reports, CVE-linked campaigns, and IDS alerts."
+        ),
+        "sorting": 3,
+        "techniques": [
+            {"techniqueID": technique_id, "score": count, "comment": f"evidence x{count}"}
+            for technique_id, count in sorted(evidence.items())
+        ],
+        "gradient": {
+            "colors": ["#ffffff", "#66b1ff", "#192fb3"],
+            "minValue": 0,
+            "maxValue": max(evidence.values(), default=1),
+        },
+    }
 
 
 class TechniqueListItem(BaseModel):

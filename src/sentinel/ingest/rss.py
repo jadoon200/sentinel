@@ -1,4 +1,8 @@
-"""Keyless RSS 2.0 / Atom ingester for threat-intel feeds (stdlib XML, no extra deps)."""
+"""Keyless RSS 2.0 / Atom ingester for threat-intel feeds.
+
+Feeds are untrusted input: parsing goes through defusedxml, which rejects
+entity-expansion and external-entity (XXE) constructs outright.
+"""
 
 import hashlib
 import html
@@ -8,6 +12,7 @@ from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree
 
 import httpx
+from defusedxml import ElementTree as SafeElementTree
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from sentinel.config import get_settings
@@ -97,7 +102,7 @@ def _parse_atom_entries(root: ElementTree.Element) -> list[ThreatReport]:
 
 
 def parse_feed(xml_text: str) -> list[ThreatReport]:
-    root = ElementTree.fromstring(xml_text)
+    root = SafeElementTree.fromstring(xml_text)
     if root.tag == "rss":
         return _parse_rss_items(root)
     if root.tag == f"{ATOM_NS}feed":

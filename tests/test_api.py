@@ -121,6 +121,14 @@ def test_alerts_endpoint_filters_by_model(client: TestClient) -> None:
     assert client.get("/alerts", params={"model": "autoencoder"}).json() == []
 
 
+def test_alerts_pagination_offset(client: TestClient) -> None:
+    first = client.get("/alerts", params={"limit": 1}).json()
+    second = client.get("/alerts", params={"limit": 1, "offset": 1}).json()
+
+    assert len(first) == len(second) == 1
+    assert first[0]["alert_id"] != second[0]["alert_id"]
+
+
 def test_alert_context_fuses_with_campaigns_via_techniques(client: TestClient) -> None:
     with_match = client.get("/alerts/2/context").json()
     assert with_match["matched_campaigns"][0]["campaign_id"] == "camp:1"

@@ -156,3 +156,16 @@ def test_navigator_layer_export(client: TestClient) -> None:
     # T1190: one report edge + one campaign edge + one alert = 3
     assert scores["T1190"] == 3
     assert layer["gradient"]["maxValue"] == 3
+
+
+def test_briefing_endpoint_renders(client: TestClient) -> None:
+    text = client.get("/briefing").text
+
+    assert "daily threat briefing" in text
+    assert "active campaigns" in text
+
+
+def test_trending_and_drift_endpoints(client: TestClient) -> None:
+    assert client.get("/trending").status_code == 200
+    drift = client.get("/feed-drift").json()
+    assert "verdict" in drift and "population_stability_index" in drift

@@ -11,6 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -340,6 +341,59 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
             for c in campaigns
         ],
     )
+
+
+class TrendingOut(BaseModel):
+    technique_id: str
+    name: str | None
+    recent_count: int
+    prior_count: int
+    lift: float
+
+
+class DriftOut(BaseModel):
+    population_stability_index: float
+    verdict: str
+    top_shifts: list[tuple[str, float]]
+
+
+@app.get("/trending")
+def trending(session: SessionDep, window_days: int = 7) -> list[TrendingOut]:
+    from sentinel.correlate.trending import trending_techniques
+
+    return [
+        TrendingOut(
+            technique_id=t.technique_id,
+            name=t.name,
+            recent_count=t.recent_count,
+            prior_count=t.prior_count,
+            lift=t.lift,
+        )
+        for t in trending_techniques(session, window_days=window_days)
+    ]
+
+
+@app.get("/feed-drift")
+def feed_drift_endpoint(session: SessionDep, window_days: int = 7) -> DriftOut:
+    from sentinel.correlate.trending import feed_drift
+
+    drift = feed_drift(session, window_days=window_days)
+    return DriftOut(
+        population_stability_index=drift.population_stability_index,
+        verdict=drift.verdict,
+        top_shifts=drift.top_shifts,
+    )
+
+
+@app.get("/briefing", response_class=PlainTextResponse)
+def briefing(session: SessionDep, window_days: int = 7) -> str:
+    from sentinel.correlate.trending import briefing_lines, feed_drift, trending_techniques
+
+    trending_list = trending_techniques(session, window_days=window_days)
+    drift = feed_drift(session, window_days=window_days)
+    campaigns = session.scalars(select(Campaign)).all()
+    n_kev = sum(1 for c in campaigns if _kev_overlap(session, c.cve_ids))
+    return "\n".join(briefing_lines(trending_list, drift, len(campaigns), n_kev))
 
 
 @app.get("/attack-navigator-layer")

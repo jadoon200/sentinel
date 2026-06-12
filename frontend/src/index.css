@@ -1,0 +1,73 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #121821;
+  --panel-2: #18202c;
+  --border: #1f2937;
+  --text: #e2e8f0;
+  --muted: #8094ab;
+  --accent: #38bdf8;
+  --accent-2: #818cf8;
+  --good: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  font-family: "SF Pro Text", -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+#root { min-height: 100vh; }
+
+.shell { max-width: 1280px; margin: 0 auto; padding: 24px 28px 64px; }
+
+.masthead { display: flex; align-items: baseline; gap: 14px; padding-bottom: 18px; }
+.masthead h1 { font-size: 22px; letter-spacing: 0.14em; margin: 0; color: var(--accent); }
+.masthead span { color: var(--muted); font-size: 13px; }
+
+.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
+.tabs button {
+  background: none; border: none; color: var(--muted); font-size: 14px;
+  padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--text); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.card .v { font-size: 26px; font-weight: 600; color: var(--accent); }
+.card .k { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
+.panel h2 { margin: 0 0 14px; font-size: 15px; color: var(--text); letter-spacing: 0.04em; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.row { display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.row:hover { background: var(--panel-2); }
+.row .title { flex: 1; font-size: 14px; }
+.row .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge.kev { background: rgba(248, 113, 113, 0.15); color: var(--bad); border: 1px solid rgba(248,113,113,0.4); }
+.badge.tech { background: rgba(56, 189, 248, 0.12); color: var(--accent); border: 1px solid rgba(56,189,248,0.35); margin: 2px; }
+.badge.model { background: rgba(129, 140, 248, 0.14); color: var(--accent-2); border: 1px solid rgba(129,140,248,0.4); }
+.badge.ok { background: rgba(52, 211, 153, 0.12); color: var(--good); border: 1px solid rgba(52,211,153,0.35); }
+
+.detail { background: var(--panel-2); border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+.detail h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.detail a { color: var(--accent); text-decoration: none; }
+.detail a:hover { text-decoration: underline; }
+
+.heat { display: grid; grid-auto-flow: column; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.heat .col { min-width: 118px; }
+.heat .col h4 { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 8px; }
+.cell { border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 11px; line-height: 1.25; border: 1px solid var(--border); }
+.cell .tid { font-weight: 700; }
+.cell .tname { color: inherit; opacity: 0.85; }
+
+.muted { color: var(--muted); font-size: 13px; }
+.error { color: var(--bad); padding: 12px; }
+table.alerts { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.alerts th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 8px; border-bottom: 1px solid var(--border); }
+table.alerts td { padding: 8px; border-bottom: 1px solid var(--border); }
+table.alerts tr.sel, table.alerts tbody tr:hover { background: var(--panel-2); cursor: pointer; }

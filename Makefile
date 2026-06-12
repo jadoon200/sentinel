@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing eval-cross migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing eval-cross eval-domain migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -64,6 +64,10 @@ ids-spectral:
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:
 	python -m sentinel.ids.replay
+
+# Domain-adaptation study: can we beat the 2017->2018 transfer failure?
+eval-domain:
+	python scripts/eval_domain_adapt.py
 
 # Cross-dataset generalization: train 2017, test 2018 (downloads a 2018 day)
 eval-cross:

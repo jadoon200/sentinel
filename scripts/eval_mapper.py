@@ -47,6 +47,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample", type=int, default=2000)
     parser.add_argument("--rerank", action="store_true")
+    parser.add_argument(
+        "--procedures", action="store_true", help="enrich docs with procedure examples"
+    )
+    parser.add_argument("--hybrid", action="store_true", help="BM25 + dense rank fusion")
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args()
@@ -54,10 +58,13 @@ def main() -> None:
     sentences = load_tram_sentences()
     random.Random(args.seed).shuffle(sentences)
     sentences = sentences[: args.sample]
-    print(f"evaluating on {len(sentences)} TRAM sentences (rerank={args.rerank})")
+    print(
+        f"evaluating on {len(sentences)} TRAM sentences "
+        f"(rerank={args.rerank}, procedures={args.procedures}, hybrid={args.hybrid})"
+    )
 
     techniques = fetch_attack_techniques()
-    docs = [technique_doc(t) for t in techniques]
+    docs = [technique_doc(t, include_procedures=args.procedures) for t in techniques]
     settings = get_settings()
     reranker = CrossEncoderScorer() if args.rerank else None
     mapper = TechniqueMapper(
@@ -66,6 +73,7 @@ def main() -> None:
         reranker=reranker,
         cache_dir=settings.nlp_embedding_cache_dir,
         model_name=settings.nlp_bi_encoder_model,
+        lexical=args.hybrid,
     )
 
     hits = {k: 0 for k in (1, 3, 5, 10)}

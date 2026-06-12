@@ -8,10 +8,17 @@ flows relabeled/fixed), "Attempted" flows dropped, identifier/topology columns
 Reproduce: `python -m sentinel.ids.train [--split temporal]`. Tracked in
 MLflow (`ids-lightgbm-baseline`).
 
-| Run | ROC-AUC | PR-AUC | F1 @0.5 | FPR |
+| Run | ROC-AUC | PR-AUC | F1 | FPR |
 |---|---|---|---|---|
-| Random 80/20 split (full 2.2M flows) | 0.9998 | 0.9994 | 0.988 | 0.4% |
-| Temporal split (train Mon–Wed, test Thu–Fri) | 0.9895 | 0.972 | **0.001** | 0.00% |
+| Random 80/20 split (full 2.2M flows) | 0.9998 | 0.9994 | 0.988 @0.5 | 0.4% |
+| Temporal split (train Mon–Wed, test Thu–Fri) | 0.9895 | 0.972 | **0.001** @0.5 | 0.00% |
+| Temporal split, benign-calibrated threshold (`--calibrate-fpr 0.01`) | 0.9895 | 0.972 | **0.800** | 1.5% |
+
+The calibrated row completes the story: ranking transfers to unseen attack
+families far better than the default threshold suggests (DDoS and all three
+web attacks 0.94–1.00 recall, PortScan 0.51, Bot 0.00) — the famous temporal
+"collapse" is mostly threshold miscalibration, fixable from benign traffic
+alone, no attack labels needed.
 
 The random split looks near-perfect but per-class recall already shows cracks
 (XSS 0.20, Infiltration 0.88). The temporal split is the honest number: every
@@ -187,6 +194,29 @@ Reranking is worth +8–10 pp on every metric at full-corpus scale (earlier
 2,000/300-sentence samples were consistent with these numbers). Cost:
 retrieval ~12 ms/sentence, reranking ~1.6 s/sentence on Apple silicon —
 reranking suits report-level ingestion, retrieval-only suits interactive use.
+
+## Mapper v2: hybrid lexical+dense retrieval and procedure enrichment
+
+Two retrieval upgrades A/B-tested on the full corpus (`--procedures`,
+`--hybrid`): technique docs enriched with real ATT&CK *procedure examples*
+("APT29 used ..."), and BM25 fused with the dense ranks via reciprocal-rank
+fusion (~60 lines, no new dependencies).
+
+| Config | hit@5 / parent@5 | hit@10 / parent@10 |
+|---|---|---|
+| dense only (baseline) | 0.446 / 0.583 | 0.549 / 0.683 |
+| + procedures only | 0.392 / 0.542 | 0.508 / 0.648 |
+| + hybrid only | 0.520 / 0.665 | 0.638 / 0.766 |
+| **+ procedures + hybrid (adopted)** | **0.553 / 0.690** | **0.682 / 0.792** |
+| (reference: dense + cross-encoder rerank) | 0.543 / 0.663 | 0.620 / 0.739 |
+
+Findings: procedures *hurt* the dense embedding alone (long appended text
+dilutes it) but are the best config combined with BM25 — the lexical side is
+what exploits the procedure vocabulary (tool names, commands, registry
+paths). The adopted config **beats the 130× more expensive cross-encoder
+rerank** at bi-encoder cost. Design note: the mapper ranks by fusion but
+reports the dense cosine, because RRF scores are rank-based and carry no
+absolute confidence — downstream tagging thresholds stay on the cosine scale.
 
 Notes:
 

@@ -24,6 +24,7 @@ dependencies = [
     "mlflow>=2.22,<3",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]
@@ -67,7 +68,7 @@ follow_imports = "skip"
 
 # No type stubs published for these ML libraries.
 [[tool.mypy.overrides]]
-module = ["lightgbm.*", "mlflow.*", "sklearn.*"]
+module = ["lightgbm.*", "mlflow.*", "sklearn.*", "defusedxml.*"]
 ignore_missing_imports = true
 
 # mlx.nn ships incomplete typing — treat the whole package as untyped.

@@ -1,3 +1,4 @@
+import pytest
 import respx
 from httpx import Response
 
@@ -68,3 +69,18 @@ def test_fetch_rss_reports_survives_broken_feed() -> None:
     reports = fetch_rss_reports(feeds=["https://broken.example/feed", "https://ok.example/feed"])
 
     assert [r.title for r in reports] == ["New ransomware exploits  VPN  flaw"]
+
+
+def test_xxe_entity_payload_is_rejected() -> None:
+    evil = (
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE rss [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
+        '<rss version="2.0"><channel><item>'
+        "<title>&x;</title><link>http://evil.example</link>"
+        "</item></channel></rss>"
+    )
+
+    # defusedxml exceptions subclass ValueError, so the per-feed error
+    # handling in fetch_rss_reports also survives a hostile feed.
+    with pytest.raises(ValueError):
+        parse_feed(evil)

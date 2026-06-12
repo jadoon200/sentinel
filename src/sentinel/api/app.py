@@ -255,8 +255,14 @@ def list_reports(
     session: SessionDep,
     source: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[ReportSummary]:
-    query = select(ThreatReport).order_by(ThreatReport.ingested_at.desc()).limit(min(limit, 200))
+    query = (
+        select(ThreatReport)
+        .order_by(ThreatReport.ingested_at.desc())
+        .limit(min(limit, 200))
+        .offset(max(offset, 0))
+    )
     if source is not None:
         query = query.where(ThreatReport.source == source)
     return [_report_summary(session, r) for r in session.scalars(query).all()]
@@ -267,8 +273,9 @@ def list_alerts(
     session: SessionDep,
     model: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[AlertOut]:
-    query = select(Alert).order_by(Alert.score.desc()).limit(min(limit, 200))
+    query = select(Alert).order_by(Alert.score.desc()).limit(min(limit, 200)).offset(max(offset, 0))
     if model is not None:
         query = query.where(Alert.model == model)
     return [

@@ -83,6 +83,12 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser.add_argument("--sample", type=int, default=None)
     parser.add_argument("--attempted", choices=["drop", "benign", "malicious"], default="drop")
     parser.add_argument("--split", choices=["random", "temporal"], default="random")
+    parser.add_argument(
+        "--calibrate-fpr",
+        type=float,
+        default=None,
+        help="pick the alert threshold from benign validation scores at this FPR",
+    )
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
@@ -126,7 +132,12 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
             }
         )
         model = train_lightgbm(x_train, y_train, x_valid, y_valid)
-        metrics = evaluate(model, x_test, y_test, labels_test)
+        threshold = 0.5
+        if args.calibrate_fpr is not None:
+            benign_scores = np.asarray(model.predict(x_valid[y_valid == 0]))
+            threshold = float(np.quantile(benign_scores, 1 - args.calibrate_fpr))
+            mlflow.log_param("calibrated_threshold", threshold)
+        metrics = evaluate(model, x_test, y_test, labels_test, threshold=threshold)
         mlflow.log_metrics(metrics)
         mlflow.lightgbm.log_model(model, artifact_path="model")
 

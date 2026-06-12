@@ -41,6 +41,9 @@ class AttackTechnique(Base):
     is_subtechnique: Mapped[bool] = mapped_column(Boolean(), default=False)
     url: Mapped[str | None] = mapped_column(String(255))
     stix_id: Mapped[str | None] = mapped_column(String(64))
+    # Real-world procedure descriptions from `uses` relationships — extra
+    # retrieval corpus for the technique mapper.
+    procedure_examples: Mapped[list[str] | None] = mapped_column(JsonType)
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now().astimezone()
     )

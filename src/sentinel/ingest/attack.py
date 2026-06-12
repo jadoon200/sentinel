@@ -24,8 +24,32 @@ def _tactics(obj: dict[str, Any]) -> list[str]:
     ]
 
 
+def parse_procedure_examples(
+    bundle: dict[str, Any], max_per_technique: int = 5
+) -> dict[str, list[str]]:
+    """Real attack descriptions ("APT29 used ...") from `uses` relationships.
+
+    Keyed by the attack-pattern STIX id; capped per technique, longest first
+    (longer procedure text carries more retrieval signal).
+    """
+    examples: dict[str, list[str]] = {}
+    for obj in bundle.get("objects", []):
+        if obj.get("type") != "relationship" or obj.get("relationship_type") != "uses":
+            continue
+        description = obj.get("description")
+        target = obj.get("target_ref", "")
+        if not description or not target.startswith("attack-pattern--"):
+            continue
+        examples.setdefault(target, []).append(description)
+    return {
+        stix_id: sorted(texts, key=len, reverse=True)[:max_per_technique]
+        for stix_id, texts in examples.items()
+    }
+
+
 def parse_techniques(bundle: dict[str, Any]) -> list[AttackTechnique]:
     """Extract active techniques (incl. sub-techniques) from a STIX bundle."""
+    procedures = parse_procedure_examples(bundle)
     techniques = []
     for obj in bundle.get("objects", []):
         if obj.get("type") != "attack-pattern":
@@ -45,6 +69,7 @@ def parse_techniques(bundle: dict[str, Any]) -> list[AttackTechnique]:
                 is_subtechnique=bool(obj.get("x_mitre_is_subtechnique", False)),
                 url=ref.get("url"),
                 stix_id=obj.get("id"),
+                procedure_examples=procedures.get(obj.get("id", ""), []),
             )
         )
     return techniques

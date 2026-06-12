@@ -52,18 +52,33 @@ class CorroboratedMatch:
     score: float
 
 
-def technique_doc(technique: AttackTechnique, max_chars: int = 2000) -> TechniqueDoc:
+def technique_doc(
+    technique: AttackTechnique,
+    max_chars: int = 2000,
+    include_procedures: bool = False,
+    max_procedures: int = 2,
+) -> TechniqueDoc:
+    """Build the retrieval document; optionally append real procedure examples.
+
+    Procedure enrichment is benchmark-gated (see docs/EVAL.md) — pass
+    include_procedures=True only where the TRAM harness showed a win.
+    """
     description = (technique.description or "")[:max_chars]
+    text = f"{technique.name}. {description}"
+    if include_procedures and technique.procedure_examples:
+        examples = " ".join(e[:300] for e in technique.procedure_examples[:max_procedures])
+        text = f"{text} Procedures: {examples}"
     return TechniqueDoc(
         technique_id=technique.technique_id,
         name=technique.name,
-        text=f"{technique.name}. {description}",
+        text=text,
     )
 
 
-def load_technique_docs(session: Session) -> list[TechniqueDoc]:
+def load_technique_docs(session: Session, include_procedures: bool = True) -> list[TechniqueDoc]:
+    """Procedure enrichment defaults on: +10pp hit@5 with hybrid retrieval (EVAL.md)."""
     techniques = session.scalars(select(AttackTechnique)).all()
-    return [technique_doc(t) for t in techniques]
+    return [technique_doc(t, include_procedures=include_procedures) for t in techniques]
 
 
 def _normalize(matrix: NDArray[np.floating]) -> NDArray[np.floating]:
@@ -89,6 +104,7 @@ class TechniqueMapper:
         reranker: PairScorer | None = None,
         cache_dir: Path | None = None,
         model_name: str | None = None,
+        lexical: bool = False,
     ) -> None:
         if not docs:
             raise ValueError("technique catalog is empty — run the ATT&CK ingester first")
@@ -98,6 +114,11 @@ class TechniqueMapper:
         self._encoder = encoder
         self._reranker = reranker
         self._index: NDArray[np.floating] | None = None
+        self._bm25 = None
+        if lexical:
+            from sentinel.nlp.lexical import BM25
+
+            self._bm25 = BM25([doc.text for doc in self._docs])
         self._cache_path = (
             _embedding_cache_path(cache_dir, model_name, self._docs)
             if cache_dir is not None and model_name is not None
@@ -134,15 +155,23 @@ class TechniqueMapper:
     def map_text(self, text: str, top_k: int = 5, candidates: int = 20) -> list[TechniqueMatch]:
         index = self._ensure_index()
         query = _normalize(np.asarray(self._encoder.encode([text])))[0]
-        similarities = index @ query
+        cosine = np.asarray(index @ query, dtype=np.float64)
+        ranking = cosine
+        if self._bm25 is not None:
+            from sentinel.nlp.lexical import reciprocal_rank_fusion
+
+            # Rank by fusion, but report the dense cosine: RRF scores are
+            # rank-based and carry no absolute confidence, while downstream
+            # thresholds (report tagging) are calibrated on the cosine scale.
+            ranking = reciprocal_rank_fusion([cosine, self._bm25.scores(text)])
 
         candidate_count = max(top_k, candidates) if self._reranker else top_k
-        order = np.argsort(similarities)[::-1][:candidate_count]
+        order = np.argsort(ranking)[::-1][:candidate_count]
         matches = [
             TechniqueMatch(
                 technique_id=self._docs[i].technique_id,
                 name=self._docs[i].name,
-                score=float(similarities[i]),
+                score=float(cosine[i]),
             )
             for i in order
         ]

@@ -88,6 +88,7 @@ def tag_reports() -> int:
             reranker=CrossEncoderScorer() if settings.nlp_rerank_reports else None,
             cache_dir=settings.nlp_embedding_cache_dir,
             model_name=settings.nlp_bi_encoder_model,
+            lexical=True,  # hybrid retrieval: benchmark-gated default (EVAL.md)
         )
         edges = tag_untagged_reports(
             session,

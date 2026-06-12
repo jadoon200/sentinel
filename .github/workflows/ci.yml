@@ -57,6 +57,8 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements.lock
+      - name: Install libomp (lightgbm runtime dependency on macOS wheels)
+        run: brew install libomp
       - name: Install dependencies
         run: |
           pip install -r requirements.lock && pip install -e .

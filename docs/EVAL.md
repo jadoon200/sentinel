@@ -227,3 +227,35 @@ Notes:
   communicates over a raw socket"), so exact sub-technique hit@1 understates
   document-level usefulness; parent-level hit@5 (0.58) is the better proxy for
   the triage use case (suggest candidate techniques to an analyst).
+
+## Conformal thresholds and label-free alert-budget control
+
+Adapted from the author's time-series conformal toolkit with two NIDS-specific
+changes: one-sided split-conformal p-values against benign calibration scores
+(finite-sample FPR guarantee under exchangeability), and a label-free online
+controller that regulates the **alert rate** — ACI's update rule with the
+interval-miss signal replaced by the alert indicator, since live NIDS has no
+ground truth. Reproduce: `python scripts/eval_conformal.py` (autoencoder
+scores, Thu–Fri processed chronologically).
+
+| Policy | alert rate | FPR | recall DDoS / Infiltration / XSS |
+|---|---|---|---|
+| static p99 | 10.7% | 5.96% | 0.60 / 0.84 / 0.67 |
+| conformal p ≤ 0.01 | 10.7% | 5.96% | 0.60 / 0.84 / 0.67 |
+| **budget controller (α=1%)** | **0.99%** | **1.10%** | 0.008 / **0.84** / **0.70** |
+
+Findings:
+
+- Conformal p-values match the static threshold numerically — the value is
+  the *guarantee*, and the 6% realized FPR is the proof that exchangeability
+  breaks across the Mon–Wed → Thu–Fri shift.
+- The budget controller holds the alert rate at its target through the same
+  drift — bounded analyst load with no labels — and rare attacks keep
+  alerting (Infiltration unchanged, XSS up).
+- The honest trade-off: a 1% budget cannot represent a volumetric attack
+  (DDoS is ~10% of the stream), so flood recall collapses by construction.
+  Budget control is a rare-event/analyst-load instrument; volumetric floods
+  are covered by the supervised and profile detectors in the ensemble.
+- Caveat recorded: folding non-alerting scores into the controller's memory
+  tracks benign drift but can be self-poisoned by high-volume sub-threshold
+  attacks; `adapt_memory=False` trades adaptivity for immunity.

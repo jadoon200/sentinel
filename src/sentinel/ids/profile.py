@@ -26,13 +26,22 @@ DST_PORT_COLUMN = "Dst Port"
 TS_COLUMN = "Timestamp"
 TS_FORMAT = "%d/%m/%Y %I:%M:%S %p"
 
-STAT_NAMES = ["unique_dst_ports", "unique_dst_ips", "log_flows_per_sec", "log_mean_fwd_pkts"]
+STAT_NAMES = [
+    "unique_dst_ports",
+    "unique_dst_ips",
+    "log_flows_per_sec",
+    "log_mean_fwd_pkts",
+    # Beacon signatures: machine-periodic timing and a single repeated target.
+    "periodicity",
+    "repeat_dst_ratio",
+]
 
 
 def build_window_stats(
     flows: pd.DataFrame,
     window: int = 16,
     stride: int = 8,
+    group_by_pair: bool = False,
 ) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
     """Per-host sliding-window fan-out stats; returns (N, n_stats) and last positions."""
     # Header drifts between dataset variants: singular vs plural packet column.
@@ -49,19 +58,35 @@ def build_window_stats(
     )
     stats = []
     last_positions = []
-    for _, group in order.groupby("host", sort=False):
+    # Pair streams isolate a C2 channel: a bot's beacons to one destination are
+    # timer-periodic, but interleave with the victim's benign traffic per-host.
+    group_keys = ["host", "dst_ip"] if group_by_pair else ["host"]
+    for _, group in order.groupby(group_keys, sort=False):
         g = group.sort_values("ts", kind="stable")
         n = len(g)
         for start in range(0, n - window + 1, stride):
             chunk = g.iloc[start : start + window]
             span = (chunk["ts"].iloc[-1] - chunk["ts"].iloc[0]).total_seconds()
             rate = window / max(span, 1.0)
+            deltas = chunk["ts"].diff().dt.total_seconds().to_numpy(dtype=float)[1:]
+            mean_dt = float(np.mean(deltas)) if len(deltas) else 0.0
+            # Coefficient of variation of inter-arrival; beacons fire on a
+            # timer, so CV ~ 0 -> periodicity score high. Sub-second windows
+            # are excluded (mean_dt floor) so scan bursts don't double-count.
+            if mean_dt >= 1.0:
+                cv = float(np.std(deltas)) / mean_dt
+                periodicity = float(-np.log(cv + 1e-3))
+            else:
+                periodicity = 0.0
+            unique_ips = float(chunk["dst_ip"].nunique())
             stats.append(
                 [
                     float(chunk["dst_port"].nunique()),
-                    float(chunk["dst_ip"].nunique()),
+                    unique_ips,
                     float(np.log1p(rate)),
                     float(np.log1p(np.nanmean(chunk["fwd_pkts"].to_numpy(dtype=float)))),
+                    periodicity,
+                    1.0 - unique_ips / window,
                 ]
             )
             last_positions.append(int(chunk["pos"].iloc[-1]))
@@ -88,6 +113,12 @@ class ProfileScorer:
         z = (stats - self.median) / self.iqr
         return np.asarray(z.max(axis=1))  # one-sided: only excess fan-out/rate alerts
 
+    def dominant_stat(self, stats: NDArray[np.float64]) -> NDArray[np.int64]:
+        """Index of the statistic driving each window's score (for technique tagging)."""
+        assert self.median is not None and self.iqr is not None
+        z = (stats - self.median) / self.iqr
+        return np.asarray(z.argmax(axis=1), dtype=np.int64)
+
 
 def main(argv: list[str] | None = None) -> dict[str, float]:
     parser = argparse.ArgumentParser()
@@ -96,6 +127,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser.add_argument("--window", type=int, default=16)
     parser.add_argument("--stride", type=int, default=8)
     parser.add_argument("--threshold-percentile", type=float, default=99.0)
+    parser.add_argument("--group-by", choices=["host", "pair"], default="host")
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
@@ -116,7 +148,8 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     x_test, y_test, labels_test = make_xy(flows.loc[~in_train], attempted="drop")
 
     benign_flows = flows.loc[y_train.index[y_train == 0]].reset_index(drop=True)
-    benign_stats, _ = build_window_stats(benign_flows, args.window, args.stride)
+    pair = args.group_by == "pair"
+    benign_stats, _ = build_window_stats(benign_flows, args.window, args.stride, group_by_pair=pair)
     rng = np.random.default_rng(args.seed)
     holdout_mask = rng.random(len(benign_stats)) < 0.1
     scorer = ProfileScorer().fit(benign_stats[~holdout_mask])
@@ -125,7 +158,9 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     )
 
     test_flows = flows.loc[x_test.index].reset_index(drop=True)
-    test_stats, last_pos = build_window_stats(test_flows, args.window, args.stride)
+    test_stats, last_pos = build_window_stats(
+        test_flows, args.window, args.stride, group_by_pair=pair
+    )
     scores = scorer.score(test_stats)
     alerts = scores > threshold
 
@@ -149,6 +184,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
                 "stride": args.stride,
                 "threshold_percentile": args.threshold_percentile,
                 "threshold": threshold,
+                "group_by": args.group_by,
                 "stats": ",".join(STAT_NAMES),
             }
         )

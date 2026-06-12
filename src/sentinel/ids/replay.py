@@ -1,4 +1,4 @@
-"""Replay corrected CIC-IDS2017 flows through both IDS models into alerts.
+"""Replay corrected CIC-IDS2017 flows through the detector ensemble into alerts.
 
 Trains on Mon-Wed, replays Thu-Fri (the temporal split), and persists the
 highest-confidence detections as Alert rows tagged with ATT&CK techniques:
@@ -176,6 +176,33 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
                 )
             )
 
+    # Fourth detector: host-profile fan-out statistics (numpy-only). The
+    # dominant statistic names the alert; port fan-out maps to T1046.
+    from sentinel.ids.profile import STAT_NAMES, ProfileScorer, build_window_stats
+
+    benign_prof_flows = flows.loc[benign_train.index].reset_index(drop=True)
+    benign_stats, _ = build_window_stats(benign_prof_flows)
+    prof_rng = np.random.default_rng(args.seed)
+    prof_holdout = prof_rng.random(len(benign_stats)) < 0.1
+    prof_scorer = ProfileScorer().fit(benign_stats[~prof_holdout])
+    prof_threshold = float(np.percentile(prof_scorer.score(benign_stats[prof_holdout]), 99.0))
+    prof_test_stats, prof_last = build_window_stats(flows.loc[x_test.index].reset_index(drop=True))
+    prof_scores = prof_scorer.score(prof_test_stats)
+    dominant = prof_scorer.dominant_stat(prof_test_stats)
+    prof_idx = np.flatnonzero(prof_scores > prof_threshold)
+    for j in prof_idx[np.argsort(-prof_scores[prof_idx])][: args.max_alerts]:
+        i = int(prof_last[j])
+        alerts.append(
+            Alert(
+                model="profile",
+                day=str(days_test.iloc[i]),
+                score=float(prof_scores[j]),
+                predicted_label=STAT_NAMES[int(dominant[j])],
+                true_label=str(labels_test.iloc[i]),
+                techniques=["T1046"] if int(dominant[j]) == 0 else [],
+            )
+        )
+
     with session_scope() as session:
         # Alerts are a derived artifact of one replay pass — rebuild wholesale.
         session.execute(delete(Alert))
@@ -186,6 +213,7 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
         "supervised_alerts": sum(a.model == "lightgbm-multiclass" for a in alerts),
         "anomaly_alerts": sum(a.model == "autoencoder" for a in alerts),
         "sequence_alerts": sum(a.model == "sequence" for a in alerts),
+        "profile_alerts": sum(a.model == "profile" for a in alerts),
     }
     print(counts)
     return counts

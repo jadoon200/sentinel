@@ -129,10 +129,24 @@ tightening (p99.9) and a tiny-flow side-condition both failed to move FPR
 (saturated windows are also small-flow), host attribution found the single
 responsible source.
 
-Bot/beacon traffic remains undetected by all four detectors: beacons are
-low-rate, single-destination, and hyper-regular — the opposite of fan-out.
-The right signature is periodicity (near-zero inter-arrival variance to a
-repeated destination), noted as future work.
+### Beacon (Bot) follow-up: periodicity statistics
+
+Two beacon signatures were added (inter-arrival coefficient-of-variation →
+periodicity score; repeated-destination ratio) and tested in two stream
+groupings:
+
+| Grouping | Bot recall | FPR | window ROC-AUC |
+|---|---|---|---|
+| per-host (deployed) | 0.000 | — | 0.79 |
+| per-(src→dst) pair (`--group-by pair`) | **0.056** | 0.9% | 0.83 |
+
+Per-host windows interleave the victim's benign traffic with its beacons,
+destroying the timer pattern; isolating each (src→dst) channel finally puts
+Bot above zero — the first detector to do so — but only the extreme tail
+clears the benign-calibrated threshold (the ARES beacon's cadence overlaps
+benign periodic services like NTP). Recorded as a foothold, not a solution:
+ranking signal exists (AUC 0.83), the operating-point recall does not yet.
+Host grouping stays the deployed default (PortScan 0.998).
 
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the

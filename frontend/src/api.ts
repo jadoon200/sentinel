@@ -76,8 +76,43 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface CampaignLink {
+  campaign_id: string;
+  matched_techniques: string[];
+  report_count: number;
+  kev_cves: string[];
+}
+
+export interface HostThreat {
+  host: string;
+  risk: number;
+  detectors: string[];
+  techniques: string[];
+  predicted_labels: string[];
+  true_labels: string[];
+  alert_count: number;
+  fused: CampaignLink[];
+  simulated: boolean;
+}
+
+export interface TrendingItem {
+  technique_id: string;
+  name: string | null;
+  recent_count: number;
+  prior_count: number;
+  lift: number;
+}
+
+export interface DriftOut {
+  population_stability_index: number;
+  verdict: string;
+  top_shifts: [string, number][];
+}
+
 export const api = {
   stats: () => get<Stats>("/stats"),
+  hosts: () => get<HostThreat[]>("/hosts"),
+  simulatedHosts: () => get<HostThreat[]>("/hosts/simulated"),
   campaigns: () => get<CampaignSummary[]>("/campaigns"),
   campaign: (id: string) => get<CampaignDetail>(`/campaigns/${id}`),
   reports: (limit = 100) => get<ReportSummary[]>(`/reports?limit=${limit}`),
@@ -85,4 +120,10 @@ export const api = {
     get<AlertOut[]>(`/alerts?limit=${limit}${model ? `&model=${model}` : ""}`),
   alertContext: (id: number) => get<AlertContext>(`/alerts/${id}/context`),
   techniques: () => get<TechniqueListItem[]>("/techniques"),
+  trending: () => get<TrendingItem[]>("/trending"),
+  drift: () => get<DriftOut>("/feed-drift"),
+  briefing: async () => {
+    const res = await fetch(`${BASE}/briefing`);
+    return res.text();
+  },
 };

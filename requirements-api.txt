@@ -1,0 +1,7 @@
+# Slim runtime for the read-only API image (Dockerfile.api) — no ML stack.
+sqlalchemy>=2.0
+psycopg[binary]>=3.2
+pydantic>=2.7
+pydantic-settings>=2.3
+fastapi>=0.115
+uvicorn>=0.30

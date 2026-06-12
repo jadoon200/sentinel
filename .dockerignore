@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+data
+mlruns
+models
+frontend/node_modules
+frontend/dist
+tests
+docs
+**/__pycache__
+*.md
+.env
+!README.md

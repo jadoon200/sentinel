@@ -45,20 +45,20 @@ baseline under the identical temporal split:
 | PortScan | 0.001 | 0.007 |
 | **Overall recall / FPR** | ~0.000 / 0.00% | **0.268** / 6.3% |
 
-### Backend: MLX vs torch-MPS (5 seeds, full benign Mon–Wed train set)
+### Backend: MLX vs torch-MPS (10 seeds, full benign Mon–Wed train set)
 
 The autoencoder has two interchangeable backends; the MLX port
 (`sentinel/ids/anomaly_mlx.py`, identical architecture/protocol) was adopted
-as the auto-selected default on Apple silicon after a 5-seed benchmark
-(`python scripts/bench_anomaly.py --seeds 5`):
+as the auto-selected default on Apple silicon after a multi-seed benchmark
+(`python scripts/bench_anomaly.py --seeds 10`):
 
 | backend | train (s) | score (s) | ROC-AUC | recall@p99 | FPR@p99 |
 |---|---|---|---|---|---|
-| torch-MPS | 4.30 ± 0.46 | 0.169 | 0.920 ± 0.006 | 0.252 ± 0.043 | 0.052 |
-| MLX | **1.18 ± 0.03** | **0.103** | 0.906 ± 0.009 | 0.248 ± 0.042 | 0.050 |
+| torch-MPS | 3.93 ± 0.20 | 0.155 | 0.915 ± 0.008 | 0.245 ± 0.050 | 0.046 |
+| MLX | **1.18 ± 0.03** | **0.102** | 0.913 ± 0.015 | 0.275 ± 0.069 | 0.037 |
 
-Recall at the deployed operating point (p99 threshold) is statistically
-identical; training is 3.7× faster with far lower run-to-run variance. MLX
+Metric parity confirmed at 10 seeds (MLX nominally ahead on recall);
+training is 3.3× faster with far lower run-to-run variance. MLX
 also links no OpenMP, so it can share a process with LightGBM — the torch
 backend deadlocks there (duplicate libomp on macOS, in either import order),
 which repeatedly hung the replay service before the switch. torch remains the
@@ -88,6 +88,11 @@ Findings, kept honest:
   and Web Brute Force 0.82–0.94 (vs 0.48) — web attacks are sequence-irregular.
 - Per-host **inter-arrival time** (leakage-free: relative, not absolute)
   raised DDoS from 0.02 to 0.49 — flood cadence is a timing signature.
+- **Seed stability & window size** (5 seeds at w16, 3 at w32): XSS recall is
+  1.000 in every run. Window 32 dominates window 16 on every family — DDoS
+  0.60 ± 0.06 (vs 0.50 ± 0.04), Brute Force 0.96 ± 0.06 (vs unstable at w16,
+  one seed collapsing to 0.0) — and is now the default (`--window 32
+  --stride 16`).
 - **Negative result**: scans/beacons stayed at 0.000 across all three
   variants. Their windows are *more predictable than benign traffic*
   (ROC-AUC ≈ 0.42, i.e. inverted), and not even extreme on the low side —
@@ -150,35 +155,24 @@ techniques.
 
 Reproduce: `python scripts/eval_mapper.py --sample 2000` (seed 13).
 
-## Bi-encoder retrieval (cisco-ai/SecureBERT2.0-biencoder), 2,000 sentences
+## Full corpus (10,411 labeled sentences after the ≥4-word filter)
 
 hit@k = a gold technique appears in the top-k predictions; parent = credit at
-parent-technique level (T1059.001 → T1059).
+parent-technique level (T1059.001 → T1059). Bi-encoder retrieval
+(SecureBERT2.0-biencoder) vs top-20 candidates reranked pairwise with the
+cross-encoder (`--sample 12000 [--rerank]`).
 
-| k | hit@k | parent hit@k |
+| k | retrieval hit@k / parent | + rerank hit@k / parent |
 |---|---|---|
-| 1 | 0.224 | 0.342 |
-| 3 | 0.358 | 0.502 |
-| 5 | 0.435 | 0.580 |
-| 10 | 0.538 | 0.679 |
+| 1 | 0.216 / 0.324 | **0.277 / 0.401** |
+| 3 | 0.366 / 0.498 | **0.465 / 0.589** |
+| 5 | 0.446 / 0.583 | **0.543 / 0.663** |
+| 10 | 0.549 / 0.683 | **0.620 / 0.739** |
 
-~37 ms/sentence on Apple Silicon CPU after a one-off ~50 s catalog embedding.
-
-## + cross-encoder reranking (SecureBERT2.0-cross_encoder), 300 sentences
-
-Top-20 retrieval candidates reranked pairwise (`--sample 300 --rerank`,
-same seed/shuffle — smaller sample, so noisier).
-
-| k | hit@k | parent hit@k |
-|---|---|---|
-| 1 | 0.230 | 0.393 |
-| 3 | 0.400 | 0.587 |
-| 5 | 0.493 | 0.663 |
-| 10 | 0.563 | 0.743 |
-
-Reranking buys ~+8 pp parent hit@3–5 over retrieval alone, at ~1.8 s/sentence
-on CPU (~50× the bi-encoder cost) — right default for report-level ingestion,
-optional for interactive use.
+Reranking is worth +8–10 pp on every metric at full-corpus scale (earlier
+2,000/300-sentence samples were consistent with these numbers). Cost:
+retrieval ~12 ms/sentence, reranking ~1.6 s/sentence on Apple silicon —
+reranking suits report-level ingestion, retrieval-only suits interactive use.
 
 Notes:
 

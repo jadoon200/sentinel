@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay api ui migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -56,6 +56,10 @@ train-sequence:
 # Host-profile fan-out detector (per-window cardinality stats, no NN)
 train-profile:
 	python -m sentinel.ids.profile
+
+# Spectral beacon detector — documented C2-channel ranking (honest negative)
+ids-spectral:
+	python -m sentinel.ids.spectral
 
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:

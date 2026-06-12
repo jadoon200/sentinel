@@ -155,6 +155,34 @@ benign periodic services like NTP). Recorded as a foothold, not a solution:
 ranking signal exists (AUC 0.83), the operating-point recall does not yet.
 Host grouping stays the deployed default (PortScan 0.998).
 
+### Spectral beacon detector — Schuster periodogram (third beacon attempt)
+
+A proper spectral test replaces the variance heuristic: per (src→dst) channel,
+the windowed Schuster statistic max_P mean|Σ exp(2πi t/P)|²/n scores how
+tightly events lock to a period. Building it surfaced three real pitfalls
+(all now in the code): second-quantized timestamps are perfectly periodic at
+P=1s (grid floored at 4s); max-over-periods inflates the noise floor (averaged
+coherence at a fixed period instead); and **two ground-truth gaps** — 67% of
+Bot flows carry the "- Attempted" label (payload-less C2 polling, which *is*
+the beacon), and the ARES victims keep beaconing past the labeled window so
+channels are labeled by dominant attack, not last flow.
+
+Result on the real C2 channels (5 hosts → 205.174.165.73): ROC-AUC **0.73**,
+recall@p99 **0.000**. The C2 beacons score 12.8–15.6 of a possible 16 — but
+benign p99 already saturates at 16.0, because **benign machine-periodic
+services (NTP, keepalives) are more spectrally coherent than a jittered
+attacker beacon**. The ranking signal is real; the operating point is not,
+and tightening the threshold cannot separate sub-maximal beacons from maximal
+benign timers.
+
+Conclusion across three attempts (variance pairs 0.056, spectral AUC 0.73,
+both recall ~0): **beacon detection by periodicity alone is the wrong frame in
+this dataset** — perfect periodicity is benign infrastructure. A real beacon
+hunter needs destination reputation / JA3 / payload-size entropy, none of
+which CIC-IDS2017 flow features expose. Kept as a characterized negative; the
+detector ships behind `make ids-spectral` for the documented C2-channel
+ranking, not as an ensemble member.
+
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the
 autoencoder catches a meaningful share of families it has never seen — which

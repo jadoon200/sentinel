@@ -343,6 +343,67 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
     )
 
 
+class CampaignLinkOut(BaseModel):
+    campaign_id: str
+    matched_techniques: list[str]
+    report_count: int
+    kev_cves: list[str]
+
+
+class HostThreatOut(BaseModel):
+    host: str
+    risk: int
+    detectors: list[str]
+    techniques: list[str]
+    predicted_labels: list[str]
+    true_labels: list[str]
+    alert_count: int
+    fused: list[CampaignLinkOut]
+    simulated: bool
+
+
+def _host_threat_out(threat: object) -> "HostThreatOut":
+    from sentinel.correlate.hosts import HostThreat
+
+    assert isinstance(threat, HostThreat)
+    return HostThreatOut(
+        host=threat.host,
+        risk=threat.risk,
+        detectors=threat.detectors,
+        techniques=threat.techniques,
+        predicted_labels=threat.predicted_labels,
+        true_labels=threat.true_labels,
+        alert_count=threat.alert_count,
+        fused=[
+            CampaignLinkOut(
+                campaign_id=link.campaign_id,
+                matched_techniques=link.matched_techniques,
+                report_count=link.report_count,
+                kev_cves=link.kev_cves,
+            )
+            for link in threat.fused
+        ],
+        simulated=threat.simulated,
+    )
+
+
+@app.get("/hosts")
+def list_host_threats(session: SessionDep) -> list[HostThreatOut]:
+    """Per-host threat rollup — alerts fused across detectors and against intel."""
+    from sentinel.correlate.hosts import host_threats
+
+    return [_host_threat_out(t) for t in host_threats(session, include_simulated=False)]
+
+
+@app.get("/hosts/simulated")
+def simulated_host_threats(session: SessionDep) -> list[HostThreatOut]:
+    """Held-out host threats revealed on demand by the dashboard's simulate button."""
+    from sentinel.correlate.hosts import host_threats
+
+    everything = host_threats(session, include_simulated=True)
+    return [_host_threat_out(t) for t in everything if t.simulated]
+
+
 class TrendingOut(BaseModel):
     technique_id: str
     name: str | None

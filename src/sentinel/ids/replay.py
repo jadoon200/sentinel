@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     x_train, y_train, labels_train = make_xy(flows.loc[in_train], attempted="drop")
     x_test, _, labels_test = make_xy(flows.loc[~in_train], attempted="drop")
     days_test = flows.loc[~in_train].loc[labels_test.index, DAY_COLUMN]
+    # Src IP survives in the raw flows (dropped only as a model feature) — used
+    # purely to attribute each detection to a host for the fusion rollup.
+    hosts_test = flows.loc[~in_train].loc[labels_test.index, "Src IP"].astype(str)
 
     booster, classes = train_multiclass(x_train, labels_train)
     probabilities = np.asarray(booster.predict(x_test))
@@ -123,6 +126,7 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
                 predicted_label=str(predicted[i]),
                 true_label=str(labels_test.iloc[i]),
                 techniques=techniques_for_label(str(predicted[i])),
+                source_host=str(hosts_test.iloc[i]),
             )
         )
         taken += 1
@@ -142,6 +146,7 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
                 predicted_label=None,
                 true_label=str(labels_test.iloc[i]),
                 techniques=[],
+                source_host=str(hosts_test.iloc[i]),
             )
         )
         taken += 1
@@ -173,6 +178,7 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
                     predicted_label=None,
                     true_label=str(labels_test.iloc[i]),
                     techniques=[],
+                    source_host=str(hosts_test.iloc[i]),
                 )
             )
 
@@ -200,8 +206,27 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
                 predicted_label=STAT_NAMES[int(dominant[j])],
                 true_label=str(labels_test.iloc[i]),
                 techniques=["T1046"] if int(dominant[j]) == 0 else [],
+                source_host=str(hosts_test.iloc[i]),
             )
         )
+
+    # Reserve a small held-out queue for the dashboard's "simulate" button:
+    # the two attack hosts flagged by the most detectors (the richest threats).
+    # Their alerts are real — just withheld from the main feed and revealed on
+    # demand to mimic a live detection arriving and fusing with intel.
+    by_host_detectors: dict[str, set[str]] = {}
+    for a in alerts:
+        if a.source_host and a.true_label and a.true_label.upper() != "BENIGN":
+            by_host_detectors.setdefault(a.source_host, set()).add(a.model)
+    queue_hosts = {
+        host
+        for host, _ in sorted(by_host_detectors.items(), key=lambda kv: len(kv[1]), reverse=True)[
+            :2
+        ]
+    }
+    for a in alerts:
+        if a.source_host in queue_hosts:
+            a.simulated = True
 
     with session_scope() as session:
         # Alerts are a derived artifact of one replay pass — rebuild wholesale.

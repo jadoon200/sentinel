@@ -18,7 +18,7 @@ Source IP is used ONLY to group flows into per-host streams — never as a
 feature — so testbed topology cannot leak into the score.
 
 Usage:
-    python -m sentinel.ids.sequence [--window 16] [--stride 8] [--epochs 3]
+    python -m sentinel.ids.sequence [--window 32] [--stride 16] [--epochs 3]
 """
 
 import argparse
@@ -149,8 +149,8 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=Path, default=None)
     parser.add_argument("--sample", type=int, default=None)
-    parser.add_argument("--window", type=int, default=16)
-    parser.add_argument("--stride", type=int, default=8)
+    parser.add_argument("--window", type=int, default=32)
+    parser.add_argument("--stride", type=int, default=16)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--threshold-percentile", type=float, default=99.0)
     parser.add_argument("--low-percentile", type=float, default=1.0)

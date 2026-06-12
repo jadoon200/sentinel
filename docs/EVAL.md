@@ -302,3 +302,34 @@ handoff, all computed from report timestamps with no extra storage:
   else significant) flag when feed composition shifts.
 - **Daily briefing** (`/briefing`): plain-text SOC handoff fusing trending
   techniques, KEV-weighted campaign counts, and drift verdict.
+
+## Cross-dataset generalization: 2017 → 2018 (the headline honesty test)
+
+The question within-dataset numbers cannot answer: does a model trained on
+CIC-IDS2017 detect the *same attack* on a *different network*? Brute-force is
+the probe — 2017's FTP/SSH-Patator and 2018's FTP/SSH-BruteForce are the same
+attack under different label strings. A canonical-name normalizer
+(`sentinel/ids/cross_dataset.py`) aligns the two datasets' divergent column
+conventions ("Total Fwd Packet" vs "Tot Fwd Pkts") to **65 shared flow
+features**; the model trains on 2017 and tests on a real CSE-CIC-IDS2018 day
+(1.05M flows from the AWS open-data bucket). Reproduce:
+`python scripts/eval_cross_dataset.py`.
+
+| Metric | Value |
+|---|---|
+| within-2017 ROC-AUC | **1.0000** |
+| cross-2018 ROC-AUC | 0.940 |
+| cross-2018 **recall @ 1% FPR** | **0.000** |
+
+The single most important number in the project. Within-dataset brute-force is
+*perfectly* separable (AUC 1.0); the model still **ranks** 2018 attacks above
+2018 benign (AUC 0.94), but at the deployed operating point it detects **none
+of them** — the absolute threshold learned on 2017 lands in the wrong place
+for 2018's score distribution. This is the published within-dataset-inflation
+failure (arXiv:2402.10974) reproduced first-hand, and it is the empirical
+justification for the conformal **budget controller** above: the fix for a
+threshold that doesn't transfer is to re-derive it from the target network's
+own benign traffic, online and label-free — exactly what the controller does.
+The cross-dataset experiment states the problem; the conformal controller is
+the answer. Together they are the project's thesis: *report the number that
+survives a network change, and build the mechanism that makes it survivable.*

@@ -26,3 +26,4 @@ frontend/dist/
 .DS_Store
 .idea/
 .vscode/
+data/cicids2018/

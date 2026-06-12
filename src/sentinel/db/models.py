@@ -154,6 +154,13 @@ class Alert(Base):
     predicted_label: Mapped[str | None] = mapped_column(String(64))
     true_label: Mapped[str | None] = mapped_column(String(64))  # known in replay, null live
     techniques: Mapped[list[str] | None] = mapped_column(JsonType)
+    # Source host the detection is attributed to — used only for grouping
+    # alerts into per-host threats (the fusion rollup), never as a model
+    # feature. Recovered from flow data at persist time.
+    source_host: Mapped[str | None] = mapped_column(String(64))
+    # Marks held-out detections reserved for the dashboard's "simulate" queue,
+    # revealed on demand to mimic a live feed (real data, shown later).
+    simulated: Mapped[bool] = mapped_column(Boolean(), default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now().astimezone()
     )

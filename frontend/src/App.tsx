@@ -1,37 +1,44 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { Alerts } from "./views/Alerts";
-import { Campaigns } from "./views/Campaigns";
-import { Heatmap } from "./views/Heatmap";
-import { Overview } from "./views/Overview";
+import { Landscape } from "./views/Landscape";
+import { ReportCard } from "./views/ReportCard";
+import { ThreatFeed } from "./views/ThreatFeed";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
 });
 
-const TABS = ["Overview", "Campaigns", "Alerts", "ATT&CK Heatmap"] as const;
-type Tab = (typeof TABS)[number];
+const TABS = [
+  { id: "feed", label: "Threat feed", sub: "what should I look at now?" },
+  { id: "land", label: "Landscape", sub: "what's happening in the world?" },
+  { id: "card", label: "Model report card", sub: "how much should I trust this?" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("Overview");
+  const [tab, setTab] = useState<Tab>("feed");
   return (
     <QueryClientProvider client={queryClient}>
       <div className="shell">
         <header className="masthead">
           <h1>SENTINEL</h1>
-          <span>threat intelligence fusion — OSINT × NLP × IDS in one ATT&CK graph</span>
+          <span>Is anything on the network tied to a known real-world threat?</span>
         </header>
         <nav className="tabs">
           {TABS.map((t) => (
-            <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>
-              {t}
+            <button
+              key={t.id}
+              className={t.id === tab ? "active" : ""}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+              <em>{t.sub}</em>
             </button>
           ))}
         </nav>
-        {tab === "Overview" && <Overview />}
-        {tab === "Campaigns" && <Campaigns />}
-        {tab === "Alerts" && <Alerts />}
-        {tab === "ATT&CK Heatmap" && <Heatmap />}
+        {tab === "feed" && <ThreatFeed />}
+        {tab === "land" && <Landscape />}
+        {tab === "card" && <ReportCard />}
       </div>
     </QueryClientProvider>
   );

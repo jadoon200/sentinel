@@ -331,5 +331,46 @@ justification for the conformal **budget controller** above: the fix for a
 threshold that doesn't transfer is to re-derive it from the target network's
 own benign traffic, online and label-free — exactly what the controller does.
 The cross-dataset experiment states the problem; the conformal controller is
-the answer. Together they are the project's thesis: *report the number that
+the answer *within a network* — but not across one, and we measured the
+limit rather than assuming it (`scripts/eval_conformal_cross.py`):
+
+| Policy on the 2018 stream | recall | FPR |
+|---|---|---|
+| static threshold (from 2017 benign) | 1.000 | 23.5% |
+| recalibrated on 2018 benign (label-free) | 0.000 | 0.2% |
+
+Re-deriving the threshold from the target network's own benign traffic
+controls the false-alarm rate but **cannot recover detection** on 2018: the
+transferred model's benign and attack scores overlap so heavily that no
+label-free threshold separates them (catch everything at 23% FPR, or nothing
+at 0.2%). The honest conclusion across both experiments: label-free
+recalibration recovers rare-attack recall under *within-network* drift
+(Infiltration 0.84, XSS 0.70 on the temporal split) but is not a substitute
+for target-domain adaptation across *different* networks. Cross-network
+transfer needs labels or feature adaptation — recalibration alone is not
+enough, and the project says so because it ran the test.
+
+### Can we beat it? Four fixes, measured (`scripts/eval_domain_adapt.py`)
+
+Recall at a target-benign-calibrated 1% FPR, 2017 -> 2018:
+
+| Fix | recall | AUC | verdict |
+|---|---|---|---|
+| baseline (train 2017) | 0.000 | 0.927 | the failure |
+| CORAL covariance alignment | 0.000 | 0.500 | collapsed ranking to chance |
+| transfer-stable features | 0.000 | 0.343 | pruning hurt — inverted |
+| target-trained autoencoder | 0.000 | 0.827 | ranks better, can't separate |
+| **few-shot: +50 labelled 2018 flows** | **1.000** | **1.000** | recovers perfect detection |
+
+The label-free domain-adaptation methods *failed*: CORAL's global linear
+alignment washed out the small brute-force signal (AUC -> 0.50), transfer-
+stable feature selection removed discriminative features (AUC 0.34, inverted),
+and even retraining the benign-only autoencoder on target traffic ranked
+better (0.83) but could not clear a usable operating point on brute-force.
+What works is **few-shot adaptation**: 50 labelled flows from the target
+network (25 attack, 25 benign) added to the 2017 training set recovers perfect
+recall. The honest, useful conclusion: cross-network IDS transfer is a
+few-shot labelling problem, not a representation-alignment one — a handful of
+target labels beats every unsupervised trick we tried, and we know because we
+ran them all. Together they are the project's thesis: *report the number that
 survives a network change, and build the mechanism that makes it survivable.*

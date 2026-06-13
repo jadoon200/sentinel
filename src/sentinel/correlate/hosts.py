@@ -13,7 +13,12 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from sentinel.correlate.fusion import FusionScore, score_campaign_matches
+from sentinel.correlate.fusion import (
+    FusionContext,
+    FusionScore,
+    build_fusion_context,
+    score_with_context,
+)
 from sentinel.db.models import Alert
 
 
@@ -65,7 +70,7 @@ def _risk(n_detectors: int, severity: float, fused: list[CampaignLink]) -> int:
     return int(min(round(score), 99))
 
 
-def _campaign_links(session: Session, techniques: set[str]) -> list[CampaignLink]:
+def _campaign_links(techniques: set[str], ctx: FusionContext) -> list[CampaignLink]:
     return [
         CampaignLink(
             campaign_id=match.campaign_id,
@@ -74,7 +79,7 @@ def _campaign_links(session: Session, techniques: set[str]) -> list[CampaignLink
             kev_cves=match.kev_cves,
             fusion=match.fusion,
         )
-        for match in score_campaign_matches(session, techniques)
+        for match in score_with_context(techniques, ctx)
     ]
 
 
@@ -88,12 +93,16 @@ def host_threats(session: Session, include_simulated: bool = False) -> list[Host
     for alert in session.scalars(query):
         grouped.setdefault(alert.source_host or "", []).append(alert)
 
+    # Build the corpus-wide fusion state once, then score every host against it —
+    # one set of queries instead of per-host, and a single shared recency anchor.
+    ctx = build_fusion_context(session)
+
     threats = []
     for host, alerts in grouped.items():
         detectors = sorted({a.model for a in alerts})
         techniques = sorted({t for a in alerts for t in (a.techniques or [])})
         severity = max((a.score for a in alerts if a.model == "lightgbm-multiclass"), default=0.0)
-        fused = _campaign_links(session, set(techniques))
+        fused = _campaign_links(set(techniques), ctx)
         threats.append(
             HostThreat(
                 host=host,

@@ -7,6 +7,7 @@ entity-expansion and external-entity (XXE) constructs outright.
 import hashlib
 import html
 import re
+from collections.abc import Mapping
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree
@@ -23,6 +24,9 @@ log = get_logger(__name__)
 
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 _TAG_RE = re.compile(r"<[^>]+>")
+# Many publishers (Cloudflare-fronted blogs, CISA) reject the default httpx
+# User-Agent and 403 silently; a normal browser UA is required to read them.
+_USER_AGENT = "Mozilla/5.0 (compatible; SENTINEL-CTI/0.1; +https://github.com/jaydenOoOo)"
 
 
 def _clean(text: str | None) -> str | None:
@@ -54,7 +58,7 @@ def _report_id(link: str | None, fallback: str) -> str:
     return f"rss:{digest}"
 
 
-def _parse_rss_items(root: ElementTree.Element) -> list[ThreatReport]:
+def _parse_rss_items(root: ElementTree.Element, source: str) -> list[ThreatReport]:
     reports = []
     for item in root.findall("./channel/item"):
         title = _clean(item.findtext("title"))
@@ -64,7 +68,7 @@ def _parse_rss_items(root: ElementTree.Element) -> list[ThreatReport]:
         reports.append(
             ThreatReport(
                 report_id=_report_id(link, item.findtext("guid") or title),
-                source="rss",
+                source=source,
                 title=title,
                 summary=_clean(item.findtext("description")),
                 url=link,
@@ -76,7 +80,7 @@ def _parse_rss_items(root: ElementTree.Element) -> list[ThreatReport]:
     return reports
 
 
-def _parse_atom_entries(root: ElementTree.Element) -> list[ThreatReport]:
+def _parse_atom_entries(root: ElementTree.Element, source: str) -> list[ThreatReport]:
     reports = []
     for entry in root.findall(f"{ATOM_NS}entry"):
         title = _clean(entry.findtext(f"{ATOM_NS}title"))
@@ -89,7 +93,7 @@ def _parse_atom_entries(root: ElementTree.Element) -> list[ThreatReport]:
         reports.append(
             ThreatReport(
                 report_id=_report_id(link, entry.findtext(f"{ATOM_NS}id") or title),
-                source="rss",
+                source=source,
                 title=title,
                 summary=_clean(summary),
                 url=link,
@@ -101,12 +105,13 @@ def _parse_atom_entries(root: ElementTree.Element) -> list[ThreatReport]:
     return reports
 
 
-def parse_feed(xml_text: str) -> list[ThreatReport]:
+def parse_feed(xml_text: str, source: str = "rss") -> list[ThreatReport]:
+    """Parse an RSS 2.0 or Atom feed; `source` is the provenance label per report."""
     root = SafeElementTree.fromstring(xml_text)
     if root.tag == "rss":
-        return _parse_rss_items(root)
+        return _parse_rss_items(root, source)
     if root.tag == f"{ATOM_NS}feed":
-        return _parse_atom_entries(root)
+        return _parse_atom_entries(root, source)
     raise ValueError(f"unsupported feed root element: {root.tag}")
 
 
@@ -117,14 +122,23 @@ def _fetch_feed(client: httpx.Client, url: str) -> str:
     return response.text
 
 
-def fetch_rss_reports(feeds: list[str] | None = None) -> list[ThreatReport]:
+def fetch_rss_reports(feeds: Mapping[str, str] | None = None) -> list[ThreatReport]:
+    """Fetch every configured feed; each report is tagged with its feed's label.
+
+    `feeds` maps provenance label -> URL (defaults to settings.rss_feeds). One
+    broken or blocked feed is logged and skipped, never fatal to the run.
+    """
     settings = get_settings()
     reports: list[ThreatReport] = []
-    with httpx.Client(timeout=settings.http_timeout_seconds) as client:
-        for url in feeds if feeds is not None else settings.rss_feeds:
+    headers = {
+        "User-Agent": _USER_AGENT,
+        "Accept": "application/rss+xml, application/atom+xml, */*",
+    }
+    with httpx.Client(timeout=settings.http_timeout_seconds, headers=headers) as client:
+        for source, url in (feeds if feeds is not None else settings.rss_feeds).items():
             try:
-                reports.extend(parse_feed(_fetch_feed(client, url)))
+                reports.extend(parse_feed(_fetch_feed(client, url), source=source))
             except (httpx.HTTPError, ElementTree.ParseError, ValueError) as exc:
                 # One broken feed must not kill the whole ingestion run.
-                log.warning("rss_feed_failed", url=url, error=str(exc))
+                log.warning("rss_feed_failed", source=source, url=url, error=str(exc))
     return reports

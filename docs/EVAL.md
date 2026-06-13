@@ -291,11 +291,15 @@ Findings:
 ## Temporal intelligence analytics (CTI side)
 
 Three graph-derived analytics close the loop from raw ingestion to an analyst
-handoff, all computed from report timestamps with no extra storage:
+handoff, all computed from report timestamps with no extra storage. Windows key
+off each report's **publish date** (falling back to ingest time), so a one-shot
+bulk ingest of feeds whose items span weeks still yields a real timeline rather
+than collapsing everything into "now".
 
 - **Trending techniques** (`/trending`): mention-rate lift, recent window vs
-  prior, +1-smoothed. On the live feed the Nx supply-chain story surfaces as
-  T1195.001 (Compromise Software Dependencies) at lift x8.
+  prior, +1-smoothed. On the live multi-source feed (17 keyless CTI publishers)
+  the surging stories surface honestly — e.g. T1588.007 (AI) at lift x7 and
+  T1584.005 (Botnet) at x4 in a recent run.
 - **Feed drift** (`/feed-drift`): Population Stability Index over the report
   *source* mix — the CTI analogue of the IDS benign-drift the conformal
   controller handles. The standard PSI bands (<0.1 stable, <0.25 moderate,

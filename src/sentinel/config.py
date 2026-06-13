@@ -24,12 +24,28 @@ class Settings(BaseSettings):
     otx_page_limit: int = 50
     otx_max_pages: int = 4
 
-    rss_feeds: list[str] = [
-        "https://www.cisa.gov/cybersecurity-advisories/all.xml",
-        "https://feeds.feedburner.com/TheHackersNews",
-        "https://www.bleepingcomputer.com/feed/",
-        "https://isc.sans.edu/rssfeed.xml",
-    ]
+    # Keyless CTI feeds, keyed by a short provenance label stored on each report
+    # (so feed-drift and the dashboard can attribute reports to a publisher).
+    # All verified live and parseable; one broken feed is skipped, not fatal.
+    rss_feeds: dict[str, str] = {
+        "thehackernews": "https://feeds.feedburner.com/TheHackersNews",
+        "bleepingcomputer": "https://www.bleepingcomputer.com/feed/",
+        "sans-isc": "https://isc.sans.edu/rssfeed.xml",
+        "krebsonsecurity": "https://krebsonsecurity.com/feed/",
+        "talos": "https://blog.talosintelligence.com/rss/",
+        "unit42": "https://unit42.paloaltonetworks.com/feed/",
+        "project-zero": "https://googleprojectzero.blogspot.com/feeds/posts/default",
+        "securelist": "https://securelist.com/feed/",
+        "welivesecurity": "https://www.welivesecurity.com/en/rss/feed/",
+        "schneier": "https://www.schneier.com/feed/atom/",
+        "checkpoint-research": "https://research.checkpoint.com/feed/",
+        "rapid7": "https://blog.rapid7.com/rss/",
+        "dfir-report": "https://thedfirreport.com/feed/",
+        "malwarebytes": "https://www.malwarebytes.com/blog/feed/index.xml",
+        "microsoft-security": "https://www.microsoft.com/en-us/security/blog/feed/",
+        "mandiant": "https://www.mandiant.com/resources/blog/rss.xml",
+        "grahamcluley": "https://grahamcluley.com/feed/",
+    }
 
     attack_stix_url: str = (
         "https://raw.githubusercontent.com/mitre-attack/attack-stix-data"

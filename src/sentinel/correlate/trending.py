@@ -35,8 +35,14 @@ def _naive(ts: datetime) -> datetime:
 
 
 def _report_times(session: Session) -> dict[str, datetime]:
-    rows = session.execute(select(ThreatReport.report_id, ThreatReport.ingested_at))
-    return {report_id: _naive(ts) for report_id, ts in rows}
+    # Key off publication time, not when we happened to ingest: a bulk one-shot
+    # ingest stamps every row with ~the same ingested_at (no temporal spread),
+    # whereas `published` reflects the real timeline the analytics describe.
+    # Fall back to ingested_at when a feed omits a publish date.
+    rows = session.execute(
+        select(ThreatReport.report_id, ThreatReport.published, ThreatReport.ingested_at)
+    )
+    return {report_id: _naive(published or ingested) for report_id, published, ingested in rows}
 
 
 def trending_techniques(

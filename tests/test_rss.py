@@ -59,16 +59,24 @@ def test_parse_atom_feed() -> None:
     assert report.tags == ["advisory"]
 
 
+def test_parse_feed_records_provenance() -> None:
+    reports = parse_feed(RSS_FEED, source="talos")
+    assert reports[0].source == "talos"  # feed label, not a generic "rss"
+
+
 @respx.mock
-def test_fetch_rss_reports_survives_broken_feed() -> None:
+def test_fetch_rss_reports_survives_broken_feed_and_labels_source() -> None:
     respx.get("https://ok.example/feed").mock(return_value=Response(200, text=RSS_FEED))
     respx.get("https://broken.example/feed").mock(
         return_value=Response(200, text="this is not xml")
     )
 
-    reports = fetch_rss_reports(feeds=["https://broken.example/feed", "https://ok.example/feed"])
+    reports = fetch_rss_reports(
+        feeds={"good-blog": "https://ok.example/feed", "broken": "https://broken.example/feed"}
+    )
 
     assert [r.title for r in reports] == ["New ransomware exploits  VPN  flaw"]
+    assert reports[0].source == "good-blog"  # per-feed provenance survives
 
 
 def test_xxe_entity_payload_is_rejected() -> None:

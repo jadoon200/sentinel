@@ -1,7 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api";
+import { api, type CampaignSummary } from "../api";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+function freshness(ageDays: number | null): string {
+  if (ageDays === null) return "undated";
+  if (ageDays < 1) return "today";
+  if (ageDays < 2) return "yesterday";
+  return `${Math.round(ageDays)}d ago`;
+}
 
 export function Landscape() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats });
@@ -40,6 +47,16 @@ export function Landscape() {
       </div>
 
       <section className="panel">
+        <h2>Active campaigns — ranked by exploited CVEs &amp; recency</h2>
+        {(campaigns.data ?? []).length === 0 && (
+          <div className="muted">No campaigns yet — run ingestion + enrichment.</div>
+        )}
+        {(campaigns.data ?? []).slice(0, 8).map((c) => (
+          <CampaignRow key={c.campaign_id} c={c} />
+        ))}
+      </section>
+
+      <section className="panel">
         <h2>Trending techniques — mention rate this week vs last</h2>
         {(trending.data ?? []).slice(0, 8).map((t) => (
           <div key={t.technique_id} className="trend-row">
@@ -63,6 +80,26 @@ export function Landscape() {
         <Briefing />
       </section>
     </>
+  );
+}
+
+function CampaignRow({ c }: { c: CampaignSummary }) {
+  return (
+    <div className="camp-row">
+      <code className="camp-id">{c.campaign_id}</code>
+      <div className="camp-mid">
+        {c.techniques.slice(0, 4).map((t) => (
+          <span key={t.technique_id} className="badge tech">
+            {t.technique_id}
+          </span>
+        ))}
+        {c.techniques.length === 0 && <span className="hint">no techniques tagged yet</span>}
+      </div>
+      {c.kev_cves.length > 0 && <span className="badge kev">{c.kev_cves.length} KEV</span>}
+      <span className="hint camp-meta">
+        {c.report_count} reports · {freshness(c.age_days)}
+      </span>
+    </div>
   );
 }
 

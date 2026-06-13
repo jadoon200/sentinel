@@ -55,6 +55,35 @@ def test_feed_drift_flags_source_shift() -> None:
     assert drift.top_shifts[0][0] in {"rss", "otx"}
 
 
+def test_feed_drift_stays_bounded_on_full_source_swap() -> None:
+    """A complete source turnover used to blow PSI past 25 (zero-bin log); additive
+    smoothing keeps it finite and in a sane range while still flagging significant."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    now = datetime(2026, 6, 12).astimezone()
+    with Session(engine) as session:
+        session.add(AttackTechnique(technique_id="T1190", name="Exploit Public-Facing App"))
+        # Prior window is all "otx"; recent window is all "newsrc" — total swap.
+        rows = [
+            ("p1", "otx", now - timedelta(days=10)),
+            ("p2", "otx", now - timedelta(days=11)),
+            ("n1", "newsrc", now - timedelta(days=1)),
+            ("n2", "newsrc", now - timedelta(days=2)),
+        ]
+        for rid, src, ts in rows:
+            session.add(ThreatReport(report_id=rid, source=src, title=rid, ingested_at=ts))
+            session.add(
+                ReportTechnique(
+                    report_id=rid, technique_id="T1190", score=0.5, corroborations=1, method="t"
+                )
+            )
+        session.commit()
+        drift = feed_drift(session, now=now, window_days=7)
+
+    assert drift.verdict == "significant"  # the shift is real and flagged
+    assert 0.0 < drift.population_stability_index < 6.0  # finite, not the old ~27
+
+
 def test_briefing_lines_render() -> None:
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)

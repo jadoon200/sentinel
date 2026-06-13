@@ -93,14 +93,36 @@ class DriftReport:
     top_shifts: list[tuple[str, float]]  # (source, recent_share - prior_share)
 
 
-def _psi(recent: dict[str, float], prior: dict[str, float]) -> float:
-    """Population Stability Index over a categorical distribution (sources)."""
+def _smoothed_shares(
+    recent: dict[str, float], prior: dict[str, float], alpha: float = 0.5
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Additive (Jeffreys) smoothing of two count distributions over their union.
+
+    PSI's term ``(r - p)·ln(r/p)`` blows up when a source appears in one window
+    but is absent in the other: its share → 0, the log → ∞, and a single new or
+    departed feed can push the index into the double digits. Real CTI feeds add
+    and drop sources constantly, so we smooth counts by ``alpha`` over the shared
+    key set before normalizing — an unseen source gets a small share proportional
+    to the data instead of an arbitrary 1e-6 floor that inflates PSI without bound.
+    """
     keys = set(recent) | set(prior)
+    if not keys:
+        return {}, {}
+    recent_total = sum(recent.values()) + alpha * len(keys)
+    prior_total = sum(prior.values()) + alpha * len(keys)
+    recent_share = {k: (recent.get(k, 0.0) + alpha) / recent_total for k in keys}
+    prior_share = {k: (prior.get(k, 0.0) + alpha) / prior_total for k in keys}
+    return recent_share, prior_share
+
+
+def _psi(recent: dict[str, float], prior: dict[str, float]) -> float:
+    """Population Stability Index over two (smoothed) categorical distributions."""
     total = 0.0
-    for key in keys:
-        r = max(recent.get(key, 0.0), 1e-6)
-        p = max(prior.get(key, 0.0), 1e-6)
-        total += (r - p) * math.log(r / p)
+    for key in set(recent) | set(prior):
+        r = recent.get(key, 0.0)
+        p = prior.get(key, 0.0)
+        if r > 0.0 and p > 0.0:
+            total += (r - p) * math.log(r / p)
     return total
 
 
@@ -134,24 +156,18 @@ def feed_drift(
         elif ts >= prior_cut:
             prior_counts[source] = prior_counts.get(source, 0.0) + 1
 
-    recent_share = _normalize(recent_counts)
-    prior_share = _normalize(prior_counts)
+    recent_share, prior_share = _smoothed_shares(recent_counts, prior_counts)
     psi = _psi(recent_share, prior_share)
     verdict = "stable" if psi < 0.1 else "moderate" if psi < 0.25 else "significant"
     shifts = sorted(
         (
             (s, recent_share.get(s, 0.0) - prior_share.get(s, 0.0))
-            for s in recent_share | prior_share
+            for s in set(recent_share) | set(prior_share)
         ),
         key=lambda kv: abs(kv[1]),
         reverse=True,
     )
     return DriftReport(population_stability_index=psi, verdict=verdict, top_shifts=shifts[:5])
-
-
-def _normalize(counts: dict[str, float]) -> dict[str, float]:
-    total = sum(counts.values())
-    return {k: v / total for k, v in counts.items()} if total else {}
 
 
 def briefing_lines(

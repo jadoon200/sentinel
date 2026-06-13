@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from sentinel.correlate.fusion import score_campaign_matches
+from sentinel.correlate.fusion import build_fusion_context, score_campaign_matches
 from sentinel.db.base import get_session_factory
 from sentinel.db.models import (
     Alert,
@@ -84,6 +84,9 @@ class CampaignSummary(BaseModel):
     kev_cves: list[str]
     report_count: int
     techniques: list[TechniqueEvidence]
+    # Age in days of the campaign's most recent member report (None if undated);
+    # lets the dashboard rank campaigns by how active they are right now.
+    age_days: float | None
 
 
 class ReportSummary(BaseModel):
@@ -231,17 +234,28 @@ def stats(session: SessionDep) -> Stats:
 
 @app.get("/campaigns")
 def list_campaigns(session: SessionDep) -> list[CampaignSummary]:
-    campaigns = session.scalars(select(Campaign).order_by(Campaign.report_count.desc())).all()
-    return [
+    """Campaigns ranked the way an analyst triages them: actively-exploited (KEV)
+    first, then most recently reported, then most corroborated."""
+    ctx = build_fusion_context(session)
+    summaries = [
         CampaignSummary(
             campaign_id=c.campaign_id,
             cve_ids=c.cve_ids,
-            kev_cves=_kev_overlap(session, c.cve_ids),
+            kev_cves=ctx.kev_by_campaign.get(c.campaign_id, []),
             report_count=c.report_count,
             techniques=_campaign_techniques(session, c.campaign_id),
+            age_days=ctx.ages.get(c.campaign_id),
         )
-        for c in campaigns
+        for c in session.scalars(select(Campaign))
     ]
+    summaries.sort(
+        key=lambda s: (
+            not s.kev_cves,
+            s.age_days if s.age_days is not None else float("inf"),
+            -s.report_count,
+        )
+    )
+    return summaries
 
 
 @app.get("/campaigns/{campaign_id}")
@@ -261,6 +275,7 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> CampaignDetail:
         kev_cves=_kev_overlap(session, campaign.cve_ids),
         report_count=campaign.report_count,
         techniques=_campaign_techniques(session, campaign_id),
+        age_days=build_fusion_context(session).ages.get(campaign_id),
         reports=[_report_summary(session, r) for r in reports],
     )
 
@@ -361,6 +376,14 @@ class CampaignLinkOut(BaseModel):
     fusion: FusionScoreOut
 
 
+class AlertRefOut(BaseModel):
+    alert_id: int
+    model: str
+    score: float
+    predicted_label: str | None
+    techniques: list[str]
+
+
 class HostThreatOut(BaseModel):
     host: str
     risk: int
@@ -369,6 +392,8 @@ class HostThreatOut(BaseModel):
     predicted_labels: list[str]
     true_labels: list[str]
     alert_count: int
+    # Strongest detection per detector — each drillable via /alerts/{id}/context.
+    alerts: list[AlertRefOut]
     fused: list[CampaignLinkOut]
     simulated: bool
 
@@ -385,6 +410,16 @@ def _host_threat_out(threat: object) -> "HostThreatOut":
         predicted_labels=threat.predicted_labels,
         true_labels=threat.true_labels,
         alert_count=threat.alert_count,
+        alerts=[
+            AlertRefOut(
+                alert_id=a.alert_id,
+                model=a.model,
+                score=a.score,
+                predicted_label=a.predicted_label,
+                techniques=a.techniques,
+            )
+            for a in threat.alerts
+        ],
         fused=[
             CampaignLinkOut(
                 campaign_id=link.campaign_id,

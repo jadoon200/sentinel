@@ -78,6 +78,11 @@ button:disabled { opacity: 0.4; cursor: default; }
 .fusion-val { font-size: 11px; color: var(--warn); font-variant-numeric: tabular-nums; }
 .stage h4 { margin: 0 0 7px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--hint); font-weight: 500; }
 .ev-line { font-size: 12px; margin-bottom: 3px; } .ev-line i { color: var(--good); font-size: 13px; }
+.det-line { margin-bottom: 3px; }
+.det-toggle { background: none; border: none; padding: 0; color: var(--text); font-size: 12px; cursor: pointer; text-align: left; font-family: inherit; }
+.det-toggle i { color: var(--hint); }
+.det-ctx { margin: 2px 0 4px 14px; }
+.det-ctx code { color: var(--accent); }
 .arrow { display: flex; align-items: center; color: var(--hint); }
 
 .metric-row { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -96,6 +101,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .trend-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .trend-name { flex: 1; font-size: 13px; }
 .trend-lift { color: var(--warn); font-size: 12px; min-width: 44px; text-align: right; }
+
+.camp-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.camp-row:last-child { border-bottom: none; }
+.camp-id { font-size: 12px; color: var(--accent); }
+.camp-mid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; }
+.camp-meta { white-space: nowrap; }
 .briefing { font-family: "SF Mono", monospace; font-size: 12px; color: var(--muted); white-space: pre-wrap; line-height: 1.6; margin: 0; }
 
 .fix-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }

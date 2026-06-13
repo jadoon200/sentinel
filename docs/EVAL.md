@@ -299,7 +299,10 @@ handoff, all computed from report timestamps with no extra storage:
 - **Feed drift** (`/feed-drift`): Population Stability Index over the report
   *source* mix — the CTI analogue of the IDS benign-drift the conformal
   controller handles. The standard PSI bands (<0.1 stable, <0.25 moderate,
-  else significant) flag when feed composition shifts.
+  else significant) flag when feed composition shifts. Counts are additively
+  (Jeffreys, α=0.5) smoothed over the union of sources before the index is
+  computed, so a source that appears or vanishes between windows yields a
+  finite, comparable PSI instead of the unbounded blow-up a zero-bin log gives.
 - **Daily briefing** (`/briefing`): plain-text SOC handoff fusing trending
   techniques, KEV-weighted campaign counts, and drift verdict.
 

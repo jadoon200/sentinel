@@ -29,9 +29,12 @@
   transfer, temporal splits over unseen attack families, multi-seed backend
   benchmarks, and recorded *negative* results (spectral beacons, botnet recall).
   The full record is [docs/EVAL.md](docs/EVAL.md) and [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
-- **One ATT&CK graph.** OSINT × NLP × IDS are fused into a single
+- **One ATT&CK graph, scored fusion.** OSINT × NLP × IDS are fused into a single
   technique-keyed knowledge graph — campaign correlation, alert context, and
-  KEV-weighted briefings all join on the same ATT&CK technique IDs.
+  KEV-weighted briefings all join on the same ATT&CK technique IDs. The join is
+  not raw tag overlap: each alert↔campaign match carries a calibrated fusion
+  strength = technique rarity (IDF) × campaign recency × corroboration, so a
+  specific, active correlation outranks a coincidental shared tag.
 
 ## Headline results
 
@@ -57,7 +60,10 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   cross-network case above.
 - **Host-fusion threat rollups.** Per-flow alerts roll up into per-host threats:
   each host shows which detectors agree, its unioned ATT&CK techniques, a
-  transparent risk score, and the real-world CTI campaign it fuses with.
+  transparent risk score, and the real-world CTI campaign it fuses with — each
+  campaign link scored by a calibrated fusion strength (rarity × recency ×
+  corroboration), so the rollup ranks meaningful correlations, not keyword
+  collisions. Worked example and table in [docs/EVAL.md](docs/EVAL.md).
 - **IDS temporal-split honesty.** A LightGBM baseline scores ROC-AUC up to
   1.0000 within-dataset but its *default* threshold collapses to F1 0.001 on
   unseen Thu–Fri attack families — the same calibration story. Re-calibrating
@@ -132,7 +138,7 @@ make briefing   # print the auto-generated daily threat briefing
 ```
 
 API endpoints: `/health`, `/stats`, `/campaigns` (+ `/{id}`), `/reports`,
-`/alerts` (+ `/{id}/context` for technique fusion), `/hosts` and
+`/alerts` (+ `/{id}/context` for scored technique fusion), `/hosts` and
 `/hosts/simulated` (host-fusion threat rollups), `/techniques` (+ `/{id}`),
 `/trending`, `/feed-drift`, `/briefing`, and `/attack-navigator-layer`
 (ATT&CK Navigator export of alert/campaign technique coverage).
@@ -143,8 +149,9 @@ The dashboard is a question-led three-tab storyline over those endpoints:
   which of the four detectors agree, its unioned ATT&CK techniques, a
   transparent risk score, and the CTI campaign it fuses with; expandable into a
   left-to-right evidence chain (detectors → host + techniques → matched
-  real-world campaign), with a "simulate detection" button that reveals held-out
-  detections.
+  real-world campaign, with a fusion-strength meter and its rarity/recency
+  breakdown on each match), with a "simulate detection" button that reveals
+  held-out detections.
 - **Landscape** — trending techniques, feed drift (PSI), the daily briefing, and
   ATT&CK Navigator export.
 - **Model report card** — the honest evaluation story, including the

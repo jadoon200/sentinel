@@ -131,9 +131,14 @@ def test_alerts_pagination_offset(client: TestClient) -> None:
 
 def test_alert_context_fuses_with_campaigns_via_techniques(client: TestClient) -> None:
     with_match = client.get("/alerts/2/context").json()
-    assert with_match["matched_campaigns"][0]["campaign_id"] == "camp:1"
-    assert with_match["matched_campaigns"][0]["kev_cves"] == ["CVE-2026-1111"]
-    assert with_match["matched_campaigns"][0]["matched_techniques"] == ["T1190"]
+    top = with_match["matched_campaigns"][0]
+    assert top["campaign_id"] == "camp:1"
+    assert top["kev_cves"] == ["CVE-2026-1111"]
+    assert top["matched_techniques"] == ["T1190"]
+    # The match carries an explainable fusion score, not just an overlap flag.
+    fusion = top["fusion"]
+    assert 0.0 <= fusion["strength"] <= 1.0
+    assert {"specificity", "recency", "corroboration", "age_days"} <= fusion.keys()
 
     no_match = client.get("/alerts/1/context").json()
     assert no_match["matched_campaigns"] == []

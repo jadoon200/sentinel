@@ -68,6 +68,7 @@ def test_host_rollup_ranks_and_fuses() -> None:
     assert set(top.techniques) == {"T1190", "T1046"}
     assert top.fused[0].campaign_id == "camp:web"
     assert top.fused[0].kev_cves == ["CVE-2026-5027"]
+    assert 0.0 < top.fused[0].fusion.strength <= 1.0  # scored, not a flat overlap
     assert top.risk > threats[1].risk
     assert threats[1].fused == []  # host B has no intel match
 

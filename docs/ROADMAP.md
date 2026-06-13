@@ -34,9 +34,16 @@ Research extensions that exceeded the original plan, all recorded in
   families (brute-force, DoS, Bot) on contamination-free held-out splits.
   Cross-network IDS transfer is a few-shot labelling problem
   (`sentinel/ids/domain_adapt.py`).
+- **Deep fusion scoring** — the headline join, hardened past set overlap. Each
+  alert↔campaign match is scored by a calibrated fusion strength = technique
+  rarity (IDF over the report corpus) × campaign recency (age decay) ×
+  corroboration, combined as a geometric mean with every component exposed for
+  explainability (`sentinel/correlate/fusion.py`). Answers the reviewer's
+  "lots of campaigns involve DoS — why is this match meaningful?" with a number.
 - **Host-fusion threat rollups** — the dashboard's fusion unit: per-flow alerts
   roll up into per-host threats joined to CTI campaigns, with detector
-  agreement, unioned ATT&CK techniques, and a transparent risk score.
+  agreement, unioned ATT&CK techniques, and a transparent risk score scaled by
+  the best campaign's fusion strength.
 - **Spectral beacon study** — Schuster-periodogram C2 detector, kept as a
   characterized negative.
 - **Hybrid BM25 + dense technique mapper** — reciprocal-rank fusion with

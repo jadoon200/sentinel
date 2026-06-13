@@ -72,6 +72,10 @@ button:disabled { opacity: 0.4; cursor: default; }
 .chain { display: flex; gap: 8px; align-items: stretch; padding: 0 16px 16px; }
 .stage { background: var(--panel-2); border-radius: 8px; padding: 11px; flex: 1; min-width: 0; }
 .stage-fused { border: 1px solid rgba(245,181,61,0.35); }
+.fusion-strength { display: flex; align-items: center; gap: 7px; margin: 4px 0 3px; }
+.fusion-bar { flex: 1; height: 5px; background: var(--panel); border-radius: 3px; overflow: hidden; }
+.fusion-bar span { display: block; height: 100%; background: var(--warn); border-radius: 3px; }
+.fusion-val { font-size: 11px; color: var(--warn); font-variant-numeric: tabular-nums; }
 .stage h4 { margin: 0 0 7px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--hint); font-weight: 500; }
 .ev-line { font-size: 12px; margin-bottom: 3px; } .ev-line i { color: var(--good); font-size: 13px; }
 .arrow { display: flex; align-items: center; color: var(--hint); }

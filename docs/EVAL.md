@@ -382,5 +382,37 @@ cross-network IDS transfer is a few-shot labelling problem, not a
 representation-alignment one. **Open caveat:** this tests few-shot on the
 *same* attack family it is evaluated on; whether labelling one family helps
 detect a *different* one on the target network is the next stress test, not
-yet run. Together they are the project's thesis: *report the number that
+yet run.
+
+### Cross-family stress test: few-shot is the fix (`scripts/eval_cross_family.py`)
+
+Run across **three different 2018 attack families** on a different network
+(brute-force, DoS, Bot), each on a contamination-free held-out split, at a
+target-calibrated 1% FPR:
+
+| Family | baseline (2017) | target autoencoder | few-shot 50 | few-shot 500 |
+|---|---|---|---|---|
+| brute-force | 0.000 (AUC .98) | 0.000 (AUC .67) | **1.000** | 1.000 |
+| DoS | 0.047 (AUC .85) | 0.001 (AUC .84) | **0.955** | 0.995 |
+| Bot | 0.000 (AUC **.40**) | 0.000 (AUC .03) | **0.986** | 0.990 |
+
+Two results, both kept honest:
+
+- **The label-free autoencoder does not work.** The hypothesis that a benign-
+  only AE trained on target traffic would catch volumetric DoS was *wrong* — it
+  ranks DoS reasonably (AUC 0.84) but, like every label-free method here, can't
+  clear a usable threshold (recall 0.001). On Bot it is worse than chance.
+- **Few-shot is the fix, and it is robust.** 50 labelled flows of a family
+  recover 0.95-0.99 recall on the new network across all three families —
+  including Bot, whose 2017 baseline ranks *worse than a coin flip* (AUC 0.40)
+  and which 50 labels lift to AUC 0.997. This is not the easy-task artifact of
+  a single family; it holds for three distinct attack types on held-out data.
+
+**Conclusion.** Cross-network IDS transfer is a few-shot labelling problem. No
+label-free transform (CORAL, feature selection, target-trained autoencoder)
+recovered detection, but ~50 labelled target flows per family do. The
+practical recipe falls out of the ensemble: the unsupervised detectors
+(host-profile fan-out, sequence model) surface candidate attacks on the new
+network, an analyst confirms ~50, and the supervised model adapts to near-
+perfect recall. A handful of labels goes remarkably far. Together they are the project's thesis: *report the number that
 survives a network change, and build the mechanism that makes it survivable.*

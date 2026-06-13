@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing eval-cross eval-domain migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing eval-cross eval-domain eval-cross-family migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -64,6 +64,10 @@ ids-spectral:
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:
 	python -m sentinel.ids.replay
+
+# Cross-family few-shot study: the cross-network fix (downloads 2018 days)
+eval-cross-family:
+	python scripts/eval_cross_family.py
 
 # Domain-adaptation study: can we beat the 2017->2018 transfer failure?
 eval-domain:

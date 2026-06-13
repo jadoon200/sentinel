@@ -53,23 +53,27 @@ def main() -> None:
     tgt = load_2018_day(dir2017.parent / "cicids2018" / f"{args.day_2018}.csv")
 
     x17, x18, y17, y18, _ = shared_feature_xy(src, tgt)
-    y18a = y18.to_numpy()
-    # Target benign: half calibrates the threshold, half is the alignment/AE corpus.
-    benign18 = x18[y18a == 0]
-    cal_idx, adapt_idx = train_test_split(
-        np.arange(len(benign18)), test_size=0.5, random_state=args.seed
-    )
+    y17a, y18a = y17.to_numpy(), y18.to_numpy()
     median18 = np.nanmedian(x18.to_numpy(dtype=float), axis=0)
 
     def fill(frame: pd.DataFrame) -> np.ndarray:
         v = frame.to_numpy(dtype=float)
         return np.where(np.isnan(v), median18, v)
 
-    results = []
+    # Disjoint 2018 split: every method is graded on the held-out TEST set; the
+    # POOL supplies few-shot labels, alignment/AE corpus, and threshold
+    # calibration. No flow appears in both — the few-shot model never sees a
+    # test flow, so its score is honest (this is what the first pass got wrong).
+    target_all = fill(x18)
+    pool_idx, test_idx = train_test_split(
+        np.arange(len(x18)), test_size=0.6, random_state=args.seed, stratify=y18a
+    )
+    x_test, y_test = target_all[test_idx], y18a[test_idx]
+    pool_benign = pool_idx[y18a[pool_idx] == 0]
+    cal_benign = target_all[pool_benign[: len(pool_benign) // 2]]
+    adapt_benign_df = x18.iloc[pool_benign[len(pool_benign) // 2 :]]
 
-    def run(name: str, model_scores_on_target: np.ndarray, benign_cal: np.ndarray) -> None:
-        rec, fpr, auc = recall_at_fpr(model_scores_on_target, y18a, benign_cal, args.alpha)
-        results.append((name, rec, fpr, auc))
+    results = []
 
     def supervised_scores(
         xtr: np.ndarray, ytr: np.ndarray, xte: np.ndarray, cal: np.ndarray
@@ -81,23 +85,23 @@ def main() -> None:
         model = train_lightgbm(a, ya, b, yb, params=DEFAULT_PARAMS)
         return np.asarray(model.predict(xte_df)), np.asarray(model.predict(cal_df))
 
-    cal_target = fill(benign18.iloc[cal_idx])
-    target_all = fill(x18)
-    y17a = y17.to_numpy()
+    def run(name: str, scores_test: np.ndarray, benign_cal: np.ndarray) -> None:
+        rec, fpr, auc = recall_at_fpr(scores_test, y_test, benign_cal, args.alpha)
+        results.append((name, rec, fpr, auc))
 
     # baseline
-    s, c = supervised_scores(fill(x17), y17a, target_all, cal_target)
+    s, c = supervised_scores(fill(x17), y17a, x_test, cal_benign)
     run("baseline", s, c)
 
-    # coral: align 2017 features to 2018 (using the adapt half of benign)
-    aligned = coral(x17, benign18.iloc[adapt_idx])
-    s, c = supervised_scores(aligned, y17a, target_all, cal_target)
+    # coral: align 2017 features to the pool's benign target traffic
+    aligned = coral(x17, adapt_benign_df)
+    s, c = supervised_scores(aligned, y17a, x_test, cal_benign)
     run("coral", s, c)
 
     # transfer-stable features only
-    keep = stable_features(x17[y17a == 0], benign18.iloc[adapt_idx], keep_frac=0.6)
+    keep = stable_features(x17[y17a == 0], adapt_benign_df, keep_frac=0.6)
     cols = [x17.columns.get_loc(k) for k in keep]
-    s, c = supervised_scores(fill(x17)[:, cols], y17a, target_all[:, cols], cal_target[:, cols])
+    s, c = supervised_scores(fill(x17)[:, cols], y17a, x_test[:, cols], cal_benign[:, cols])
     run(f"stable-feats({len(keep)})", s, c)
 
     # target benign-only autoencoder (no source labels at all)
@@ -105,23 +109,28 @@ def main() -> None:
     from sentinel.ids.backends import select_anomaly_backend
 
     _, train_ae, score_ae = select_anomaly_backend()
-    scaler = FlowScaler().fit(benign18.iloc[adapt_idx])
-    ae = train_ae(scaler.transform(benign18.iloc[adapt_idx]), epochs=5, seed=args.seed)
-    ae_scores = score_ae(ae, scaler.transform(x18))
-    ae_cal = score_ae(ae, scaler.transform(benign18.iloc[cal_idx]))
-    run("target-AE", ae_scores, ae_cal)
+    scaler = FlowScaler().fit(adapt_benign_df)
+    ae = train_ae(scaler.transform(adapt_benign_df), epochs=5, seed=args.seed)
+    run(
+        "target-AE",
+        score_ae(ae, scaler.transform(x18.iloc[test_idx])),
+        score_ae(ae, scaler.transform(x18.iloc[pool_benign[: len(pool_benign) // 2]])),
+    )
 
-    # few-shot: 2017 + N labelled 2018 flows
+    # few-shot: 2017 + N labelled flows drawn ONLY from the pool (never test)
+    rng = np.random.default_rng(args.seed)
+    pool_atk = pool_idx[y18a[pool_idx] == 1]
+    pool_ben = pool_idx[y18a[pool_idx] == 0]
     for n in (50, 200, 1000):
-        rng = np.random.default_rng(args.seed)
-        atk = np.where(y18a == 1)[0]
-        ben = np.where(y18a == 0)[0]
         take = np.concatenate(
-            [rng.choice(atk, n // 2, replace=False), rng.choice(ben, n // 2, replace=False)]
+            [
+                rng.choice(pool_atk, n // 2, replace=False),
+                rng.choice(pool_ben, n // 2, replace=False),
+            ]
         )
         xtr = np.vstack([fill(x17), target_all[take]])
         ytr = np.concatenate([y17a, y18a[take]])
-        s, c = supervised_scores(xtr, ytr, target_all, cal_target)
+        s, c = supervised_scores(xtr, ytr, x_test, cal_benign)
         run(f"few-shot-{n}", s, c)
 
     print(f"\n{'fix':<18}{'recall':>9}{'FPR':>8}{'AUC':>8}")

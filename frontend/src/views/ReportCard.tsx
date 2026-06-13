@@ -7,9 +7,9 @@ const detectors = [
 
 const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
   ["baseline (train 2017)", "0.000", "0.93", "bad"],
-  ["CORAL covariance alignment", "0.000", "0.50", "bad"],
-  ["transfer-stable features", "0.000", "0.34", "bad"],
-  ["target-trained autoencoder", "0.000", "0.83", "mid"],
+  ["CORAL covariance alignment", "0.000", "0.56", "bad"],
+  ["transfer-stable features", "0.000", "0.01", "bad"],
+  ["target-trained autoencoder", "0.000", "0.81", "mid"],
   ["few-shot: +50 labelled flows", "1.000", "1.00", "good"],
 ];
 
@@ -45,12 +45,31 @@ export function ReportCard() {
             <span className="hint">AUC {auc}</span>
           </div>
         ))}
+        <p style={{ marginBottom: 8 }}>
+          The clever label-free tricks <b>failed</b> — alignment collapsed the model to chance,
+          feature pruning made it worse, and a target-trained autoencoder couldn't clear a usable
+          threshold either. What works: <b style={{ color: "var(--good)" }}>50 labelled flows</b>{" "}
+          from the target network, verified on held-out data across three different attack families.
+        </p>
+        <div className="xfam">
+          {[
+            ["DoS", "0.05", "0.96"],
+            ["Bot", "0.00", "0.99"],
+            ["Brute-force", "0.00", "1.00"],
+          ].map(([fam, before, after]) => (
+            <div key={fam} className="xfam-row">
+              <span className="xfam-name">{fam}</span>
+              <span className="fix-bad">recall {before}</span>
+              <i className="ti ti-arrow-right" aria-hidden="true" />
+              <span className="fix-good">recall {after}</span>
+              <span className="hint">with 50 labels</span>
+            </div>
+          ))}
+        </div>
         <p style={{ marginBottom: 0 }}>
-          The clever label-free tricks <b>failed</b> — covariance alignment collapsed the model to
-          chance, feature pruning made it worse. What works is embarrassingly simple:{" "}
-          <b style={{ color: "var(--good)" }}>50 labelled flows</b> from the target network recover
-          perfect detection. Cross-network transfer is a <i>few-shot</i> problem, not a
-          representation-alignment one.
+          Even Bot — where the blind 2017 model ranks <i>worse than a coin flip</i> (AUC 0.40) — is
+          recovered to AUC 0.997. Cross-network transfer is a <i>few-shot</i> problem: the
+          unsupervised detectors surface candidates, an analyst confirms ~50, the model adapts.
         </p>
       </section>
 

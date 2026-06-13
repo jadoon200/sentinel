@@ -106,6 +106,12 @@ button:disabled { opacity: 0.4; cursor: default; }
 .fix-val.fix-mid { color: var(--warn); }
 .fix-val.fix-good { color: var(--good); }
 
+.xfam { background: var(--panel-2); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+.xfam-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; }
+.xfam-name { width: 90px; }
+.xfam-row i { color: var(--hint); }
+.xfam-row .fix-bad { color: var(--bad); }
+.xfam-row .fix-good { color: var(--good); }
 .roster-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .roster-row i { font-size: 20px; color: var(--muted); }
 .roster-main { flex: 1; } .roster-main div:first-child { font-size: 13.5px; }

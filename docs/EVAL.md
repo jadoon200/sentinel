@@ -362,15 +362,25 @@ Recall at a target-benign-calibrated 1% FPR, 2017 -> 2018:
 | target-trained autoencoder | 0.000 | 0.827 | ranks better, can't separate |
 | **few-shot: +50 labelled 2018 flows** | **1.000** | **1.000** | recovers perfect detection |
 
-The label-free domain-adaptation methods *failed*: CORAL's global linear
-alignment washed out the small brute-force signal (AUC -> 0.50), transfer-
-stable feature selection removed discriminative features (AUC 0.34, inverted),
-and even retraining the benign-only autoencoder on target traffic ranked
-better (0.83) but could not clear a usable operating point on brute-force.
-What works is **few-shot adaptation**: 50 labelled flows from the target
-network (25 attack, 25 benign) added to the 2017 training set recovers perfect
-recall. The honest, useful conclusion: cross-network IDS transfer is a
-few-shot labelling problem, not a representation-alignment one — a handful of
-target labels beats every unsupervised trick we tried, and we know because we
-ran them all. Together they are the project's thesis: *report the number that
+Methodology note (this matters): the few-shot labels and the test set are a
+**disjoint split of the 2018 day** — the model is graded only on flows it
+never saw, and the few-shot labels are drawn from a separate pool. An earlier
+pass tested on flows that overlapped the few-shot set; the 1.000 survived
+removing that contamination, so it is real, not leakage.
+
+The label-free methods *failed*: CORAL alignment washed out the small
+brute-force signal (AUC 0.56), transfer-stable feature selection removed the
+discriminative features (AUC 0.01), and the target-trained autoencoder ranked
+better (0.81) but could not clear a usable operating point. Only **few-shot**
+worked — 50 labelled target flows recover perfect recall on held-out traffic.
+
+Why so clean? Not overfitting: FTP/SSH brute-force is intrinsically separable
+*once the model has in-domain labels*. The 2017->2018 failure is a
+boundary-placement problem (the 2017 boundary lands wrong on 2018's feature
+scale); a few target labels re-anchor it. The honest, useful conclusion:
+cross-network IDS transfer is a few-shot labelling problem, not a
+representation-alignment one. **Open caveat:** this tests few-shot on the
+*same* attack family it is evaluated on; whether labelling one family helps
+detect a *different* one on the target network is the next stress test, not
+yet run. Together they are the project's thesis: *report the number that
 survives a network change, and build the mechanism that makes it survivable.*

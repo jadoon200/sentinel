@@ -7,9 +7,9 @@ const detectors = [
 
 const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
   ["baseline (train 2017)", "0.000", "0.93", "bad"],
-  ["CORAL covariance alignment", "0.000", "0.50", "bad"],
-  ["transfer-stable features", "0.000", "0.34", "bad"],
-  ["target-trained autoencoder", "0.000", "0.83", "mid"],
+  ["CORAL covariance alignment", "0.000", "0.56", "bad"],
+  ["transfer-stable features", "0.000", "0.01", "bad"],
+  ["target-trained autoencoder", "0.000", "0.81", "mid"],
   ["few-shot: +50 labelled flows", "1.000", "1.00", "good"],
 ];
 
@@ -45,12 +45,17 @@ export function ReportCard() {
             <span className="hint">AUC {auc}</span>
           </div>
         ))}
-        <p style={{ marginBottom: 0 }}>
+        <p>
           The clever label-free tricks <b>failed</b> — covariance alignment collapsed the model to
           chance, feature pruning made it worse. What works is embarrassingly simple:{" "}
           <b style={{ color: "var(--good)" }}>50 labelled flows</b> from the target network recover
-          perfect detection. Cross-network transfer is a <i>few-shot</i> problem, not a
-          representation-alignment one.
+          perfect detection — verified on a held-out split, not leakage. Cross-network transfer is a{" "}
+          <i>few-shot</i> problem, not a representation-alignment one.
+        </p>
+        <p className="hint" style={{ marginBottom: 0 }}>
+          Open caveat, stated plainly: this tests few-shot on the same attack family it's graded on.
+          Whether labelling one family helps detect a different one is the next stress test — not yet
+          run.
         </p>
       </section>
 

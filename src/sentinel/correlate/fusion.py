@@ -62,6 +62,27 @@ class ScoredMatch:
     fusion: FusionScore = field(default_factory=lambda: FusionScore(0.0, 0.0, 0.0, 0.0, None))
 
 
+@dataclass(frozen=True)
+class FusionContext:
+    """Corpus-wide state needed to score any alert↔campaign match, built once.
+
+    Scoring is a hot loop on the dashboard (`host_threats` scores every host), so
+    the per-corpus pieces — technique rarity, campaign technique edges, freshness,
+    and KEV overlap — are precomputed here and reused, instead of re-querying per
+    call. Crucially, `ages` is anchored to a *single* corpus-wide "now", so a
+    campaign's recency is the same no matter which alert it is matched against
+    (scoring matched campaigns in isolation would let a stale campaign anchor
+    "now" to itself and score as fresh).
+    """
+
+    idf: dict[str, float]
+    half_life_days: float
+    edges_by_campaign: dict[str, list["CampaignTechnique"]]
+    campaigns: dict[str, "Campaign"]
+    ages: dict[str, float]
+    kev_by_campaign: dict[str, list[str]]
+
+
 def _naive(ts: datetime) -> datetime:
     # SQLite drops tzinfo on round-trip while Postgres keeps it; normalize so
     # age arithmetic never mixes naive and aware datetimes.
@@ -132,26 +153,22 @@ def technique_idf(session: Session) -> dict[str, float]:
     return {tid: (value - lo) / (hi - lo) for tid, value in raw.items()}
 
 
-def _campaign_ages(
-    session: Session, campaign_ids: set[str], now: datetime | None
-) -> tuple[dict[str, float], datetime | None]:
-    """Age in days of each campaign's most recent member report.
+def _campaign_ages(session: Session, now: datetime | None) -> dict[str, float]:
+    """Age in days of every campaign's most recent member report.
 
     A campaign's "freshness" is the latest publish (falling back to ingest) time
-    across its reports. When `now` is not supplied it defaults to the newest
-    observation in the matched set, so scoring is deterministic and dataset-anchored
-    (the same convention the trending analytics use) rather than wall-clock drifting.
+    across its reports, measured against one corpus-wide anchor: `now` if given,
+    otherwise the newest observation in the *whole* graph (deterministic and
+    dataset-anchored, the same convention the trending analytics use, rather than
+    wall-clock drifting). Anchoring globally — not per matched subset — keeps a
+    campaign's recency identical regardless of which alert it is scored against.
     """
-    if not campaign_ids:
-        return {}, now
     rows = session.execute(
         select(
             CampaignReport.campaign_id,
             ThreatReport.published,
             ThreatReport.ingested_at,
-        )
-        .join(ThreatReport, ThreatReport.report_id == CampaignReport.report_id)
-        .where(CampaignReport.campaign_id.in_(campaign_ids))
+        ).join(ThreatReport, ThreatReport.report_id == CampaignReport.report_id)
     ).all()
 
     latest: dict[str, datetime] = {}
@@ -168,68 +185,73 @@ def _campaign_ages(
     if anchor is not None:
         for campaign_id, ts in latest.items():
             ages[campaign_id] = max((anchor - ts).total_seconds() / 86400.0, 0.0)
-    return ages, anchor
+    return ages
 
 
-def score_campaign_matches(
-    session: Session, techniques: set[str], now: datetime | None = None
-) -> list[ScoredMatch]:
-    """Rank the campaigns whose technique evidence overlaps `techniques`.
+def _kev_by_campaign(session: Session, campaigns: dict[str, "Campaign"]) -> dict[str, list[str]]:
+    """KEV (actively-exploited) CVEs per campaign, via one batched lookup."""
+    all_cves = {cve for c in campaigns.values() for cve in c.cve_ids}
+    if not all_cves:
+        return {}
+    listed = set(session.scalars(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(all_cves))))
+    return {cid: sorted(cve for cve in c.cve_ids if cve in listed) for cid, c in campaigns.items()}
 
-    Replaces raw set-overlap: each matched campaign is scored by the rarity of the
-    shared techniques, the campaign's freshness, and how firmly it asserts those
-    techniques, then sorted by the combined fusion strength (KEV involvement and
-    match breadth break ties). Returns an empty list when nothing overlaps.
+
+def build_fusion_context(session: Session, now: datetime | None = None) -> FusionContext:
+    """Precompute the corpus-wide state for scoring (see `FusionContext`).
+
+    Build this once and reuse it across many `score_with_context` calls — e.g.
+    scoring every host on the dashboard — to avoid re-querying per alert.
     """
+    edges_by_campaign: dict[str, list[CampaignTechnique]] = {}
+    for edge in session.scalars(select(CampaignTechnique)):
+        edges_by_campaign.setdefault(edge.campaign_id, []).append(edge)
+    campaigns = {c.campaign_id: c for c in session.scalars(select(Campaign))}
+    return FusionContext(
+        idf=technique_idf(session),
+        half_life_days=get_settings().fusion_recency_half_life_days,
+        edges_by_campaign=edges_by_campaign,
+        campaigns=campaigns,
+        ages=_campaign_ages(session, now),
+        kev_by_campaign=_kev_by_campaign(session, campaigns),
+    )
+
+
+def score_with_context(techniques: set[str], ctx: FusionContext) -> list[ScoredMatch]:
+    """Rank the campaigns whose technique evidence overlaps `techniques`, using a
+    prebuilt `FusionContext`. See `score_campaign_matches` for the scoring model."""
     if not techniques:
         return []
 
-    # Match at the ATT&CK family level (parent ↔ sub-technique). campaign_techniques
-    # is a small derived table, so scanning it and filtering by family is cheaper
-    # to reason about than a portable prefix query and catches the parent/sub
-    # mismatch between the IDS map and the NLP tagger.
+    # Match at the ATT&CK family level (parent ↔ sub-technique) so the IDS map's
+    # parent tags (DoS → T1499) fuse with the NLP tagger's sub-techniques (T1499.004).
     requested_families = {_family(t) for t in techniques}
-    edges = [
-        e
-        for e in session.scalars(select(CampaignTechnique))
-        if _family(e.technique_id) in requested_families
-    ]
-    if not edges:
-        return []
-
-    by_campaign: dict[str, list[CampaignTechnique]] = {}
-    for edge in edges:
-        by_campaign.setdefault(edge.campaign_id, []).append(edge)
-
-    idf = technique_idf(session)
-    half_life = get_settings().fusion_recency_half_life_days
-    ages, _ = _campaign_ages(session, set(by_campaign), now)
 
     matches: list[ScoredMatch] = []
-    for campaign_id, campaign_edges in by_campaign.items():
-        campaign = session.get(Campaign, campaign_id)
+    for campaign_id, edges in ctx.edges_by_campaign.items():
+        campaign = ctx.campaigns.get(campaign_id)
         if campaign is None:
             continue
-        matched = sorted(e.technique_id for e in campaign_edges)
+        matched_edges = [e for e in edges if _family(e.technique_id) in requested_families]
+        if not matched_edges:
+            continue
+        matched = sorted(e.technique_id for e in matched_edges)
 
         # idf defaults to 1.0 for a technique never seen in a report (maximally
         # surprising — it is not part of the feed's common vocabulary).
-        specificity = _soft_or([idf.get(t, 1.0) for t in matched])
+        specificity = _soft_or([ctx.idf.get(t, 1.0) for t in matched])
         corroboration = _soft_or(
-            [_corroboration_factor(e.score, e.corroborations) for e in campaign_edges]
+            [_corroboration_factor(e.score, e.corroborations) for e in matched_edges]
         )
-        age = ages.get(campaign_id)
-        recency = _recency_factor(age, half_life)
+        age = ctx.ages.get(campaign_id)
+        recency = _recency_factor(age, ctx.half_life_days)
         strength = (specificity * recency * corroboration) ** (1.0 / 3.0)
 
-        kev = sorted(
-            session.scalars(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(campaign.cve_ids)))
-        )
         matches.append(
             ScoredMatch(
                 campaign_id=campaign_id,
                 cve_ids=campaign.cve_ids,
-                kev_cves=kev,
+                kev_cves=ctx.kev_by_campaign.get(campaign_id, []),
                 report_count=campaign.report_count,
                 matched_techniques=matched,
                 fusion=FusionScore(
@@ -247,3 +269,21 @@ def score_campaign_matches(
         reverse=True,
     )
     return matches
+
+
+def score_campaign_matches(
+    session: Session, techniques: set[str], now: datetime | None = None
+) -> list[ScoredMatch]:
+    """Rank the campaigns whose technique evidence overlaps `techniques`.
+
+    Replaces raw set-overlap: each matched campaign is scored by the rarity of the
+    shared techniques (IDF specificity), the campaign's freshness (recency decay),
+    and how firmly it asserts those techniques (corroboration), combined as a
+    geometric mean and sorted by the result (KEV involvement and match breadth
+    break ties). Returns an empty list when nothing overlaps. Convenience wrapper
+    that builds a one-shot `FusionContext`; reuse `build_fusion_context` +
+    `score_with_context` when scoring many technique sets against one corpus.
+    """
+    if not techniques:
+        return []
+    return score_with_context(techniques, build_fusion_context(session, now))

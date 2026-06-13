@@ -9,7 +9,9 @@ from sentinel.correlate.fusion import (
     _corroboration_factor,
     _recency_factor,
     _soft_or,
+    build_fusion_context,
     score_campaign_matches,
+    score_with_context,
     technique_idf,
 )
 from sentinel.db.base import Base
@@ -187,3 +189,66 @@ def test_parent_alert_matches_subtechnique_campaign() -> None:
         # Exact sub-technique tag still matches; an unrelated family does not.
         assert score_campaign_matches(session, {"T1499.004"}, now=NOW)[0].campaign_id == "camp:dos"
         assert score_campaign_matches(session, {"T1498"}, now=NOW) == []
+
+
+def _seed_recency(session: Session) -> None:
+    """One fresh campaign and one 90-day-old campaign, sharing no techniques."""
+    for tid in ("T1190", "T1059"):
+        session.add(AttackTechnique(technique_id=tid, name=tid))
+    session.add(ThreatReport(report_id="rss:new", source="rss", title="x", published=NOW))
+    session.add(
+        ThreatReport(
+            report_id="rss:old", source="rss", title="x", published=NOW - timedelta(days=90)
+        )
+    )
+    session.add(
+        ReportTechnique(
+            report_id="rss:new", technique_id="T1190", score=0.5, corroborations=1, method="t"
+        )
+    )
+    session.add(
+        ReportTechnique(
+            report_id="rss:old", technique_id="T1059", score=0.5, corroborations=1, method="t"
+        )
+    )
+    for cid, rid, tid in [("camp:new", "rss:new", "T1190"), ("camp:old", "rss:old", "T1059")]:
+        session.add(Campaign(campaign_id=cid, cve_ids=[], report_count=1))
+        session.add(CampaignReport(campaign_id=cid, report_id=rid))
+        session.add(
+            CampaignTechnique(
+                campaign_id=cid, technique_id=tid, corroborations=1, score=0.5, method="f"
+            )
+        )
+    session.commit()
+
+
+def test_recency_anchor_is_corpus_wide_not_per_match() -> None:
+    """A stale campaign must score as stale even when it is the only match — its
+    recency is anchored to the newest report in the whole graph, not to itself."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        _seed_recency(session)
+        # now=None → anchor is the corpus-wide latest (camp:new's report today).
+        old = score_campaign_matches(session, {"T1059"}, now=None)
+        new = score_campaign_matches(session, {"T1190"}, now=None)
+
+    assert old[0].campaign_id == "camp:old"
+    # 90 days at a 30-day half-life -> 0.5**3 = 0.125; would be 1.0 if anchored to itself.
+    assert old[0].fusion.recency < 0.2
+    assert new[0].fusion.recency == 1.0  # the fresh campaign is the anchor
+
+
+def test_context_reuse_matches_one_shot() -> None:
+    """Scoring via a shared context equals the one-shot wrapper (host_threats path)."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        _seed(session)
+        ctx = build_fusion_context(session, now=NOW)
+        via_ctx = {m.campaign_id: m.fusion.strength for m in score_with_context({"T1195.001"}, ctx)}
+        one_shot = {
+            m.campaign_id: m.fusion.strength
+            for m in score_campaign_matches(session, {"T1195.001"}, now=NOW)
+        }
+    assert via_ctx == one_shot and via_ctx

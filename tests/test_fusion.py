@@ -146,3 +146,44 @@ def test_no_overlap_yields_no_matches() -> None:
         _seed(session)
         assert score_campaign_matches(session, set(), now=NOW) == []
         assert score_campaign_matches(session, {"T9999"}, now=NOW) == []
+
+
+def test_parent_alert_matches_subtechnique_campaign() -> None:
+    """A DoS alert tagged the parent T1499 must fuse with a campaign tagged the
+    sub-technique T1499.004 — the IDS map emits parents, the NLP tagger subs."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(
+            AttackTechnique(technique_id="T1499.004", name="Application or System Exploitation")
+        )
+        session.add(ThreatReport(report_id="rss:dos", source="rss", title="DoS", published=NOW))
+        session.add(
+            ReportTechnique(
+                report_id="rss:dos",
+                technique_id="T1499.004",
+                score=0.6,
+                corroborations=2,
+                method="t",
+            )
+        )
+        session.add(Campaign(campaign_id="camp:dos", cve_ids=["CVE-2026-9"], report_count=2))
+        session.add(CampaignReport(campaign_id="camp:dos", report_id="rss:dos"))
+        session.add(
+            CampaignTechnique(
+                campaign_id="camp:dos",
+                technique_id="T1499.004",
+                corroborations=2,
+                score=0.6,
+                method="cve-component-fusion",
+            )
+        )
+        session.commit()
+
+        # Parent alert tag matches the sub-technique campaign tag.
+        parent = score_campaign_matches(session, {"T1499"}, now=NOW)
+        assert [m.campaign_id for m in parent] == ["camp:dos"]
+        assert parent[0].matched_techniques == ["T1499.004"]  # honest: reports the sub
+        # Exact sub-technique tag still matches; an unrelated family does not.
+        assert score_campaign_matches(session, {"T1499.004"}, now=NOW)[0].campaign_id == "camp:dos"
+        assert score_campaign_matches(session, {"T1498"}, now=NOW) == []

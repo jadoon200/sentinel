@@ -146,7 +146,10 @@ evaluation record; this card summarizes, it does not introduce new results.
     member-report count.
   The geometric mean is conjunctive: a weak factor drags the whole score down,
   so a strong correlation must be rare **and** recent **and** well-evidenced.
-  Every component is returned alongside the strength (`/alerts/{id}/context`,
+  Matching is at the ATT&CK family level (a parent technique from the IDS map
+  fuses with the sub-techniques the NLP tagger emits), so DoS alerts (T1499)
+  correlate with DoS campaigns (T1499.004) instead of silently missing. Every
+  component is returned alongside the strength (`/alerts/{id}/context`,
   `/hosts`) and rendered in the dashboard, so the rank is always explainable.
 - **Worked example (`tests/test_fusion.py`, table in `docs/EVAL.md`):** a
   specific+recent+corroborated match scores **0.888**; a generic+stale one

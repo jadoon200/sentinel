@@ -342,6 +342,14 @@ is suppressed. The same strength scales the per-host risk bonus
 `/alerts/{id}/context` and `/hosts`, so the dashboard shows *why* a correlation
 ranks where it does rather than an opaque confidence.
 
+Matching is at the **ATT&CK family level**: the IDS attack map emits parent
+techniques (DoS → T1499) while the NLP tagger tags sub-techniques (T1499.004),
+so a sub-technique fuses with its parent (standard ATT&CK roll-up). On the live
+graph this is the difference between a DoS alert silently failing to correlate
+and surfacing its DoS campaign — fused hosts rose 4 → 12 when family matching
+replaced exact-string overlap, the specificity still computed on the campaign's
+actual (sub-)technique IDF.
+
 ## Cross-dataset generalization: 2017 → 2018 (the headline honesty test)
 
 The question within-dataset numbers cannot answer: does a model trained on

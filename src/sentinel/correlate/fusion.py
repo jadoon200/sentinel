@@ -68,6 +68,17 @@ def _naive(ts: datetime) -> datetime:
     return ts.replace(tzinfo=None) if ts.tzinfo is not None else ts
 
 
+def _family(technique_id: str) -> str:
+    """ATT&CK family id: T1499.004 -> T1499. Sub-techniques fuse with their parent.
+
+    The IDS attack map emits parent techniques (DoS -> T1499) while the NLP
+    mapper often tags sub-techniques (T1499.004), so exact-string overlap would
+    silently miss a real DoS-alert ↔ DoS-campaign correlation. Matching at the
+    family level is standard ATT&CK practice (sub-techniques roll up to parents).
+    """
+    return technique_id.split(".", 1)[0]
+
+
 def _soft_or(values: list[float]) -> float:
     """Probabilistic OR: 1 - prod(1 - v). Multiple weak signals compound, but the
     result stays in [0, 1] and is dominated by the strongest evidence."""
@@ -173,9 +184,16 @@ def score_campaign_matches(
     if not techniques:
         return []
 
-    edges = session.scalars(
-        select(CampaignTechnique).where(CampaignTechnique.technique_id.in_(techniques))
-    ).all()
+    # Match at the ATT&CK family level (parent ↔ sub-technique). campaign_techniques
+    # is a small derived table, so scanning it and filtering by family is cheaper
+    # to reason about than a portable prefix query and catches the parent/sub
+    # mismatch between the IDS map and the NLP tagger.
+    requested_families = {_family(t) for t in techniques}
+    edges = [
+        e
+        for e in session.scalars(select(CampaignTechnique))
+        if _family(e.technique_id) in requested_families
+    ]
     if not edges:
         return []
 

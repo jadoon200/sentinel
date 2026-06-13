@@ -250,9 +250,9 @@ def list_campaigns(session: SessionDep) -> list[CampaignSummary]:
     ]
     summaries.sort(
         key=lambda s: (
-            not s.kev_cves,
-            s.age_days if s.age_days is not None else float("inf"),
-            -s.report_count,
+            -len(s.kev_cves),  # most actively-exploited CVEs first
+            s.age_days if s.age_days is not None else float("inf"),  # then freshest
+            -s.report_count,  # then best-corroborated
         )
     )
     return summaries

@@ -1,7 +1,12 @@
 import numpy as np
 import pandas as pd
 
-from sentinel.ids.domain_adapt import coral, feature_shift, stable_features
+from sentinel.ids.domain_adapt import (
+    coral,
+    feature_shift,
+    few_shot_training_set,
+    stable_features,
+)
 
 
 def test_coral_matches_target_covariance() -> None:
@@ -30,3 +35,19 @@ def test_feature_shift_and_stable_selection() -> None:
 
     keep = stable_features(source, target, keep_frac=0.5)
     assert keep == ["stable"]  # only the transfer-stable feature survives
+
+
+def test_few_shot_training_set_appends_balanced_target_labels() -> None:
+    rng = np.random.default_rng(13)
+    source_x = pd.DataFrame(rng.normal(0, 1, (200, 3)), columns=["a", "b", "c"])
+    source_y = pd.Series(rng.integers(0, 2, 200))
+    # Target has an extra column that must be dropped to the shared schema.
+    target_x = pd.DataFrame(rng.normal(5, 1, (400, 4)), columns=["a", "b", "c", "extra"])
+    target_y = pd.Series(np.r_[np.ones(200), np.zeros(200)].astype(int))
+
+    x, y = few_shot_training_set(source_x, source_y, target_x, target_y, n_labels=40)
+
+    assert list(x.columns) == ["a", "b", "c"]  # aligned to source schema
+    assert len(x) == 240 and len(y) == 240  # 200 source + 40 target
+    assert int((y.iloc[200:] == 1).sum()) == 20  # balanced: 20 attack
+    assert int((y.iloc[200:] == 0).sum()) == 20  # 20 benign

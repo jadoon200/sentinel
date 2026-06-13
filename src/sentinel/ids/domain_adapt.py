@@ -72,3 +72,42 @@ def stable_features(
     shift = feature_shift(source_benign, target_benign)
     n_keep = max(1, int(len(shift) * keep_frac))
     return sorted(shift.index[-n_keep:].tolist())
+
+
+def few_shot_training_set(
+    source_x: pd.DataFrame,
+    source_y: "pd.Series[int]",
+    target_x: pd.DataFrame,
+    target_y: "pd.Series[int]",
+    n_labels: int = 50,
+    seed: int = 13,
+) -> tuple[pd.DataFrame, "pd.Series[int]"]:
+    """Build the few-shot adapted training set: source + N labelled target flows.
+
+    This is the measured cross-network fix (docs/EVAL.md): the label-free
+    transforms above all failed, but folding a balanced handful of labelled
+    target-network flows into the source training set re-anchors the decision
+    boundary to the target's feature scale and recovers 0.95-0.99 recall across
+    attack families. Draws n_labels // 2 attack + n_labels // 2 benign target
+    flows; the caller trains any classifier on the returned (X, y).
+
+    The target columns are aligned to the source's by intersection, so the two
+    frames must share a (canonical) feature schema — see `cross_dataset`.
+    """
+    rng = np.random.default_rng(seed)
+    shared = [c for c in source_x.columns if c in target_x.columns]
+    atk_idx = np.flatnonzero(target_y.to_numpy() == 1)
+    ben_idx = np.flatnonzero(target_y.to_numpy() == 0)
+    half = n_labels // 2
+    take = np.concatenate(
+        [
+            rng.choice(atk_idx, min(half, len(atk_idx)), replace=False),
+            rng.choice(ben_idx, min(half, len(ben_idx)), replace=False),
+        ]
+    )
+    x = pd.concat([source_x[shared], target_x.iloc[take][shared]], ignore_index=True)
+    y = pd.concat(
+        [source_y.reset_index(drop=True), target_y.iloc[take].reset_index(drop=True)],
+        ignore_index=True,
+    )
+    return x, y

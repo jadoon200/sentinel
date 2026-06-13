@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     nlp_tag_max_techniques: int = 5
     nlp_rerank_reports: bool = False
 
+    # Fusion scoring: half-life (days) of the recency decay applied to a matched
+    # campaign's age — a 30-day-old correlation scores half a fresh one. Governs
+    # the recency factor in the alert↔campaign fusion strength (correlate/fusion.py).
+    fusion_recency_half_life_days: float = 30.0
+
     # IDS training (corrected CIC-IDS2017; local MLflow file store by default,
     # point at http://localhost:5001 when the compose MLflow server is up)
     ids_data_dir: Path = Path("data/cicids2017")

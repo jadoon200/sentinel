@@ -51,12 +51,21 @@ export interface AlertOut {
   techniques: string[];
 }
 
+export interface FusionScore {
+  strength: number;
+  specificity: number;
+  recency: number;
+  corroboration: number;
+  age_days: number | null;
+}
+
 export interface CampaignMatch {
   campaign_id: string;
   cve_ids: string[];
   kev_cves: string[];
   report_count: number;
   matched_techniques: string[];
+  fusion: FusionScore;
 }
 
 export interface AlertContext {
@@ -81,6 +90,7 @@ export interface CampaignLink {
   matched_techniques: string[];
   report_count: number;
   kev_cves: string[];
+  fusion: FusionScore;
 }
 
 export interface HostThreat {

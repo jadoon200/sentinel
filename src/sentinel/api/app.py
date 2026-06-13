@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from sentinel.correlate.fusion import score_campaign_matches
 from sentinel.db.base import get_session_factory
 from sentinel.db.models import (
     Alert,
@@ -36,9 +37,11 @@ app = FastAPI(
 )
 
 # Read-only API; the Vite dev server and any local dashboard build may call it.
+# Allow any localhost port — the dashboard's dev-server port varies (5173 by
+# default, but Vite increments when busy and preview tooling assigns its own).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -106,12 +109,23 @@ class AlertOut(BaseModel):
     techniques: list[str]
 
 
+class FusionScoreOut(BaseModel):
+    """Explainable fusion strength: the headline [0,1] confidence and its parts."""
+
+    strength: float
+    specificity: float
+    recency: float
+    corroboration: float
+    age_days: float | None
+
+
 class CampaignMatch(BaseModel):
     campaign_id: str
     cve_ids: list[str]
     kev_cves: list[str]
     report_count: int
     matched_techniques: list[str]
+    fusion: FusionScoreOut
 
 
 class AlertContext(BaseModel):
@@ -298,7 +312,10 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
     """Fusion join: campaigns whose technique evidence overlaps this alert's techniques.
 
     This is the platform's core correlation — an IDS detection gains threat-intel
-    context ("these techniques are active in campaign X reported last week").
+    context. Matches are not raw tag overlap: each is scored by the rarity of the
+    shared technique(s), the campaign's freshness, and how firmly the campaign
+    asserts them, and ranked by the combined fusion strength so a specific, recent,
+    well-corroborated correlation surfaces above a coincidental shared tag.
     """
     alert = session.get(Alert, alert_id)
     if alert is None:
@@ -313,32 +330,25 @@ def alert_context(alert_id: int, session: SessionDep) -> AlertContext:
         true_label=alert.true_label,
         techniques=alert.techniques or [],
     )
-    if not alert.techniques:
-        return AlertContext(alert=alert_out, matched_campaigns=[])
-
-    edges = session.scalars(
-        select(CampaignTechnique).where(CampaignTechnique.technique_id.in_(alert.techniques))
-    ).all()
-    matched: dict[str, list[str]] = {}
-    for edge in edges:
-        matched.setdefault(edge.campaign_id, []).append(edge.technique_id)
-
-    campaigns = session.scalars(
-        select(Campaign)
-        .where(Campaign.campaign_id.in_(matched))
-        .order_by(Campaign.report_count.desc())
-    ).all()
+    matches = score_campaign_matches(session, set(alert.techniques or []))
     return AlertContext(
         alert=alert_out,
         matched_campaigns=[
             CampaignMatch(
-                campaign_id=c.campaign_id,
-                cve_ids=c.cve_ids,
-                kev_cves=_kev_overlap(session, c.cve_ids),
-                report_count=c.report_count,
-                matched_techniques=sorted(matched[c.campaign_id]),
+                campaign_id=m.campaign_id,
+                cve_ids=m.cve_ids,
+                kev_cves=m.kev_cves,
+                report_count=m.report_count,
+                matched_techniques=m.matched_techniques,
+                fusion=FusionScoreOut(
+                    strength=m.fusion.strength,
+                    specificity=m.fusion.specificity,
+                    recency=m.fusion.recency,
+                    corroboration=m.fusion.corroboration,
+                    age_days=m.fusion.age_days,
+                ),
             )
-            for c in campaigns
+            for m in matches
         ],
     )
 
@@ -348,6 +358,7 @@ class CampaignLinkOut(BaseModel):
     matched_techniques: list[str]
     report_count: int
     kev_cves: list[str]
+    fusion: FusionScoreOut
 
 
 class HostThreatOut(BaseModel):
@@ -380,6 +391,13 @@ def _host_threat_out(threat: object) -> "HostThreatOut":
                 matched_techniques=link.matched_techniques,
                 report_count=link.report_count,
                 kev_cves=link.kev_cves,
+                fusion=FusionScoreOut(
+                    strength=link.fusion.strength,
+                    specificity=link.fusion.specificity,
+                    recency=link.fusion.recency,
+                    corroboration=link.fusion.corroboration,
+                    age_days=link.fusion.age_days,
+                ),
             )
             for link in threat.fused
         ],

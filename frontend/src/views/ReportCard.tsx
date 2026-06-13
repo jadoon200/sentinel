@@ -1,7 +1,7 @@
 const detectors = [
   ["Supervised LightGBM", "known attack families", "seen families ≈ 1.0", "ti-target"],
   ["Benign-only autoencoder", "unseen-family anomalies", "Infiltration 0.84 · DDoS 0.71", "ti-wave-sine"],
-  ["Per-host sequence model", "slow web attacks", "XSS 1.00 · brute-force 0.94", "ti-timeline"],
+  ["Per-host sequence model", "slow web attacks", "XSS 1.00 · brute-force ~0.96", "ti-timeline"],
   ["Host-profile fan-out", "scans & sweeps", "PortScan 0.998", "ti-affiliate"],
 ];
 
@@ -88,6 +88,51 @@ export function ReportCard() {
         <p className="muted" style={{ marginBottom: 0 }}>
           Technique mapper: zero-shot over 697 ATT&CK techniques, parent hit@5 0.690 on 10,411 TRAM
           sentences. Autoencoder backend: MLX, 3.3× faster than torch at recall parity (10 seeds).
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>How a correlation is scored — not just a shared tag</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          The platform is named for <i>fusion</i>. A network alert and a real-world campaign
+          "match" when they share an ATT&CK technique — but sharing a <i>common</i> tag (brute
+          force, in nearly every campaign) means little, while sharing a <i>rare</i> one
+          (supply-chain) is strong evidence. Each match gets a transparent strength so the feed
+          ranks meaningful correlations, not coincidences:
+        </p>
+        {(
+          [
+            ["specificity", "how rare the shared technique is across the feed (IDF rarity)", "ti-fingerprint"],
+            ["recency", "how recently the campaign was reported (30-day half-life decay)", "ti-clock"],
+            ["corroboration", "how many ingested reports back the campaign's technique", "ti-stack-2"],
+          ] as [string, string, string][]
+        ).map(([name, desc, icon]) => (
+          <div key={name} className="roster-row">
+            <i className={`ti ${icon}`} aria-hidden="true" />
+            <div className="roster-main">
+              <div>{name}</div>
+              <div className="hint">{desc}</div>
+            </div>
+          </div>
+        ))}
+        <p style={{ marginBottom: 8 }}>
+          strength = (specificity × recency × corroboration)<sup>1/3</sup> — conjunctive, so a weak
+          factor drags the whole score down. A match must be rare <b>and</b> recent <b>and</b>{" "}
+          corroborated to rank high.
+        </p>
+        <div className="xfam">
+          <div className="xfam-row">
+            <span className="xfam-name">specific + recent + corroborated</span>
+            <span className="fix-good">strength 0.89</span>
+          </div>
+          <div className="xfam-row">
+            <span className="xfam-name">generic + stale shared tag</span>
+            <span className="fix-bad">strength ≈ 0</span>
+          </div>
+        </div>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Honest scope: the factor weights and half-life are chosen heuristics, not learned from
+          labelled correlations — trust the <i>ranking</i>, not the absolute number.
         </p>
       </section>
     </>

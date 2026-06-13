@@ -20,6 +20,15 @@ function story(t: HostThreat): string {
   return `${what} — flagged by ${n} of 4 detectors`;
 }
 
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+function freshness(ageDays: number | null): string {
+  if (ageDays === null) return "undated";
+  if (ageDays < 1) return "reported today";
+  if (ageDays < 2) return "reported yesterday";
+  return `${Math.round(ageDays)} days old`;
+}
+
 function EvidenceChain({ t }: { t: HostThreat }) {
   return (
     <div className="chain">
@@ -48,9 +57,18 @@ function EvidenceChain({ t }: { t: HostThreat }) {
         <div className="stage stage-fused">
           <h4>matched real-world intel</h4>
           {t.fused.map((f) => (
-            <div key={f.campaign_id} style={{ marginBottom: 6 }}>
+            <div key={f.campaign_id} style={{ marginBottom: 10 }}>
               <code>{f.campaign_id}</code>
-              <div className="hint">{f.report_count} corroborating reports</div>
+              <div className="fusion-strength" title="rarity x recency x corroboration">
+                <div className="fusion-bar">
+                  <span style={{ width: pct(f.fusion.strength) }} />
+                </div>
+                <span className="fusion-val">{pct(f.fusion.strength)} match</span>
+              </div>
+              <div className="hint">
+                specific {pct(f.fusion.specificity)} · {freshness(f.fusion.age_days)} ·{" "}
+                {f.report_count} corroborating reports
+              </div>
               {f.kev_cves.map((c) => (
                 <span key={c} className="badge kev">
                   {c} KEV
@@ -82,7 +100,14 @@ function ThreatRow({ t }: { t: HostThreat }) {
           <div className="threat-title">
             <span className="mono">{t.host}</span>
             {t.simulated && <span className="badge live">live</span>}
-            {t.fused.length > 0 && <span className="badge fusedtag">fused with intel</span>}
+            {t.fused.length > 0 && (
+              <span
+                className="badge fusedtag"
+                title="rarity x recency x corroboration — see Model report card"
+              >
+                {pct(t.fused[0].fusion.strength)} intel match
+              </span>
+            )}
           </div>
           <div className="threat-story">{story(t)}</div>
           <div>
@@ -122,7 +147,7 @@ export function ThreatFeed() {
       <div className="feed-bar">
         <span className="muted">
           {all.length} host threats · ranked by risk ·{" "}
-          <span style={{ color: "var(--warn)" }}>amber = fused with intel</span>
+          <span style={{ color: "var(--warn)" }}>amber = scored intel match</span>
         </span>
         <button
           onClick={() => queue.length && setRevealed([{ ...queue[0] }, ...revealed])}

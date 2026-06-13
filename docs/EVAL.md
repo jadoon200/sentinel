@@ -303,6 +303,53 @@ handoff, all computed from report timestamps with no extra storage:
 - **Daily briefing** (`/briefing`): plain-text SOC handoff fusing trending
   techniques, KEV-weighted campaign counts, and drift verdict.
 
+## Fusion scoring: from shared tag to calibrated correlation
+
+The platform is named for fusion, so the join between an IDS alert and a CTI
+campaign has to be more than set overlap. Naive overlap ("the alert and the
+campaign both mention T1499") treats a ubiquitous technique exactly like a rare,
+specific one — the precise objection a reviewer raises: *lots of campaigns
+involve DoS, so why is this match meaningful?* `correlate/fusion.py` answers it
+by scoring every match on three independent, interpretable signals and combining
+them as a geometric mean (conjunctive — a weak factor drags the whole down):
+
+- **specificity** — min-max-normalized IDF of the shared technique over the
+  report corpus. A technique in 1-of-N reports is surprising (→1.0); one in most
+  reports carries no discriminating signal (→0.0).
+- **recency** — exponential decay on the matched campaign's age (latest member
+  report), half-life 30 days (`SENTINEL_FUSION_RECENCY_HALF_LIFE_DAYS`). A live
+  correlation outranks a months-old one.
+- **corroboration** — the campaign's own mean technique score discounted by a
+  saturating function of its member-report count.
+
+**Worked example** (`tests/test_fusion.py`). Two campaigns each share one
+technique with the same alert. `camp:rare` shares T1195.001 (supply-chain,
+1-of-5 corpus reports, reported today, 3 corroborating reports at score 0.8);
+`camp:common` shares T1110 (brute force, 5-of-5 reports, last seen 120 days ago,
+1 report at score 0.4). Under naive overlap both are equal "matches". Scored:
+
+| campaign | specificity | recency | corroboration | **strength** |
+|----------|-------------|---------|---------------|--------------|
+| camp:rare   | 1.000 | 1.000 | 0.700 | **0.888** |
+| camp:common | 0.000 | 0.062 | 0.200 | **0.000** |
+
+The generic match collapses to zero here because T1110 saturates the corpus
+(every report carries it → IDF rarity 0). In a real feed a common tag is
+small-but-positive rather than exactly zero, but the ordering is the point: the
+specific, recent, corroborated correlation is surfaced and the coincidental one
+is suppressed. The same strength scales the per-host risk bonus
+(`correlate/hosts.py`) and is returned component-by-component on
+`/alerts/{id}/context` and `/hosts`, so the dashboard shows *why* a correlation
+ranks where it does rather than an opaque confidence.
+
+Matching is at the **ATT&CK family level**: the IDS attack map emits parent
+techniques (DoS → T1499) while the NLP tagger tags sub-techniques (T1499.004),
+so a sub-technique fuses with its parent (standard ATT&CK roll-up). On the live
+graph this is the difference between a DoS alert silently failing to correlate
+and surfacing its DoS campaign — fused hosts rose 4 → 12 when family matching
+replaced exact-string overlap, the specificity still computed on the campaign's
+actual (sub-)technique IDF.
+
 ## Cross-dataset generalization: 2017 → 2018 (the headline honesty test)
 
 The question within-dataset numbers cannot answer: does a model trained on

@@ -1,7 +1,8 @@
 # SENTINEL — Model Card
 
 This card documents the five models in the SENTINEL threat-intelligence fusion
-platform. Every number is traceable to [`docs/EVAL.md`](EVAL.md), the complete
+platform, plus the **fusion scoring layer** that ranks the correlations they
+feed. Every number is traceable to [`docs/EVAL.md`](EVAL.md), the complete
 evaluation record; this card summarizes, it does not introduce new results.
 
 ## Intended use & users
@@ -127,6 +128,42 @@ evaluation record; this card summarizes, it does not introduce new results.
   timer pattern. Ranking signal exists, operating-point recall does not yet —
   host grouping stays the deployed default.
 
+## Fusion scoring layer (correlation ranking — not a trained model)
+
+- **Task:** rank the join between an IDS alert (or per-host rollup) and an
+  ingested CTI campaign, so an analyst sees *specific, active, corroborated*
+  correlations first instead of coincidental shared-tag matches. This is the
+  ranking the intended-use section refers to. Code: `src/sentinel/correlate/fusion.py`.
+- **Architecture:** a transparent, deterministic scoring function — **no neural
+  net, no learned weights**. Each alert↔campaign match gets a `[0,1]` fusion
+  strength from the geometric mean of three interpretable factors:
+  - **specificity** — min-max-normalized IDF of the shared technique over the
+    report corpus (a rare tag like T1195.001 is strong evidence; a ubiquitous
+    one like T1110 is near-zero);
+  - **recency** — exponential decay on the matched campaign's age, 30-day
+    half-life (`SENTINEL_FUSION_RECENCY_HALF_LIFE_DAYS`);
+  - **corroboration** — the campaign's mean technique score, saturating in its
+    member-report count.
+  The geometric mean is conjunctive: a weak factor drags the whole score down,
+  so a strong correlation must be rare **and** recent **and** well-evidenced.
+  Matching is at the ATT&CK family level (a parent technique from the IDS map
+  fuses with the sub-techniques the NLP tagger emits), so DoS alerts (T1499)
+  correlate with DoS campaigns (T1499.004) instead of silently missing. Every
+  component is returned alongside the strength (`/alerts/{id}/context`,
+  `/hosts`) and rendered in the dashboard, so the rank is always explainable.
+- **Worked example (`tests/test_fusion.py`, table in `docs/EVAL.md`):** a
+  specific+recent+corroborated match scores **0.888**; a generic+stale one
+  collapses toward **0** under the same overlap. The per-host risk score scales
+  its intel bonus by this strength rather than a flat overlap flag.
+- **What "calibrated" does and does not mean here:** the score is *bounded,
+  interpretable, and deterministic* — not a probability calibrated against
+  ground-truth correlation outcomes, because no labelled "true campaign
+  association" data exists. The factor weights and the 30-day half-life are
+  chosen heuristics, not fitted. Because specificity is corpus-relative, a small
+  or skewed report corpus shifts the absolute numbers (the *ranking* is the
+  reliable output, not the absolute value). It is decision-support ordering,
+  not a verdict — the same human-in-the-loop caveat as every model here.
+
 ## Evaluation summary
 
 | Model | Protocol | Headline metric | Honest caveat |
@@ -155,6 +192,11 @@ evaluation record; this card summarizes, it does not introduce new results.
   corrected labels still call benign — recall/FPR are bounded by label quality.
 - **English-only CTI:** the technique mapper is evaluated only on English TRAM
   sentences; non-English reports are out of scope.
+- **Fusion scores are heuristic, not validated against correlation ground
+  truth.** The fusion strength ranks correlations with hand-chosen factor
+  weights and a 30-day half-life; there is no labelled "true association"
+  dataset to validate the ranking, and the corpus-relative specificity term
+  shifts with feed size and mix. Trust the *ordering*, not the absolute number.
 - **Sub-technique confusions:** mapper sub-technique hit@1 is 0.277; parent
   granularity (0.690 @5) is the reliable level. TRAM sentences are short and
   often context-free, so single-sentence scores are a floor — campaign-level

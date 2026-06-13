@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from sentinel.db.models import Alert, Campaign, CampaignTechnique, KevEntry
+from sentinel.correlate.fusion import FusionScore, score_campaign_matches
+from sentinel.db.models import Alert
 
 
 @dataclass
@@ -22,6 +23,7 @@ class CampaignLink:
     matched_techniques: list[str]
     report_count: int
     kev_cves: list[str]
+    fusion: FusionScore
 
 
 @dataclass
@@ -42,8 +44,11 @@ class HostThreat:
 #   detector agreement  — how many of the 4 detectors independently flagged the
 #                         host (the ensemble's strongest signal)
 #   severity            — the host's peak supervised confidence (0..1)
-#   intel fusion        — bonus if the host's techniques match a CTI campaign,
-#                         larger if that campaign involves KEV (exploited) CVEs
+#   intel fusion        — bonus scaled by the *strength* of the best campaign
+#                         correlation (specificity x recency x corroboration),
+#                         so a rare, recent, well-evidenced match lifts risk far
+#                         more than a coincidental shared tag; a further bump if
+#                         that campaign involves KEV (exploited) CVEs
 _DETECTOR_WEIGHT = 14  # per distinct detector, capped at 4 -> 56
 _SEVERITY_WEIGHT = 24
 _FUSION_BONUS = 14
@@ -53,39 +58,24 @@ _KEV_BONUS = 6
 def _risk(n_detectors: int, severity: float, fused: list[CampaignLink]) -> int:
     score = min(n_detectors, 4) * _DETECTOR_WEIGHT + severity * _SEVERITY_WEIGHT
     if fused:
-        score += _FUSION_BONUS
+        best_strength = max(link.fusion.strength for link in fused)
+        score += _FUSION_BONUS * best_strength
         if any(link.kev_cves for link in fused):
             score += _KEV_BONUS
     return int(min(round(score), 99))
 
 
 def _campaign_links(session: Session, techniques: set[str]) -> list[CampaignLink]:
-    if not techniques:
-        return []
-    edges = session.scalars(
-        select(CampaignTechnique).where(CampaignTechnique.technique_id.in_(techniques))
-    ).all()
-    by_campaign: dict[str, list[str]] = {}
-    for edge in edges:
-        by_campaign.setdefault(edge.campaign_id, []).append(edge.technique_id)
-    links = []
-    for campaign_id, matched in by_campaign.items():
-        campaign = session.get(Campaign, campaign_id)
-        if campaign is None:
-            continue
-        kev = sorted(
-            session.scalars(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(campaign.cve_ids)))
+    return [
+        CampaignLink(
+            campaign_id=match.campaign_id,
+            matched_techniques=match.matched_techniques,
+            report_count=match.report_count,
+            kev_cves=match.kev_cves,
+            fusion=match.fusion,
         )
-        links.append(
-            CampaignLink(
-                campaign_id=campaign_id,
-                matched_techniques=sorted(matched),
-                report_count=campaign.report_count,
-                kev_cves=kev,
-            )
-        )
-    links.sort(key=lambda link: (len(link.kev_cves), len(link.matched_techniques)), reverse=True)
-    return links
+        for match in score_campaign_matches(session, techniques)
+    ]
 
 
 def host_threats(session: Session, include_simulated: bool = False) -> list[HostThreat]:

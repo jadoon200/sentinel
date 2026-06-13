@@ -2,7 +2,7 @@
 
 **Cyber threat intelligence fusion platform** — correlates open-source threat intelligence (OSINT) with ML-based network intrusion detection, the way real SOCs and intelligence fusion centres do.
 
-> OSINT ingestion, NLP technique mapping over the full ATT&CK catalog, campaign correlation, a four-detector IDS ensemble with an honest cross-dataset/temporal evaluation, conformal alert-budget control, temporal analytics, a read-only knowledge-graph API, and a React/TypeScript dashboard are all in place. Remaining polish: demo video + blog post. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> OSINT ingestion, NLP technique mapping over the full ATT&CK catalog, campaign correlation, a four-detector IDS ensemble with an honest cross-dataset/temporal evaluation, a measured cross-network transfer fix (few-shot domain adaptation), conformal alert-budget control, host-fusion threat rollups, temporal analytics, a read-only knowledge-graph API, and a React/TypeScript dashboard are all in place. Remaining polish: demo video + blog post. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -37,17 +37,27 @@
 
 All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
 
-- **Cross-dataset 2017 → 2018 (the centrepiece honesty test).** Within-2017
-  brute-force is perfectly separable (ROC-AUC **1.0000**); the model still
-  *ranks* 2018 attacks above 2018 benign (cross-AUC **0.940**) but at the
-  deployed operating point detects none of them (**recall @ 1% FPR 0.000**) —
-  the absolute threshold learned on 2017 lands in the wrong place for 2018's
-  score distribution. This is the published within-dataset-inflation failure
-  reproduced first-hand, and it motivates the conformal controller below.
-- **Conformal alert-budget control (the fix).** A label-free online controller
-  re-derives the operating point from the target network's own benign traffic,
-  holding the alert rate at a 1% budget through the same drift (FPR 1.10%) while
-  rare attacks keep alerting (Infiltration 0.84, XSS 0.70).
+- **Cross-network transfer, failure → fix (the centrepiece research result).**
+  A 2017-trained IDS is perfectly separable within-dataset (ROC-AUC **1.0000**)
+  but at any usable threshold detects *none* of the same attacks on a different
+  network in 2018 (**recall @ 1% FPR 0.000**) — the absolute threshold lands in
+  the wrong place for 2018's score distribution. Every **label-free** fix failed:
+  CORAL covariance alignment, transfer-stable feature selection, and a
+  target-trained autoencoder all stayed at recall ~0. **Few-shot is the fix** —
+  50 labelled target flows recover **0.95–0.99 recall across three different
+  attack families** (brute-force, DoS, Bot) on contamination-free held-out
+  splits; Bot's blind-2017 baseline ranks *worse than chance* (AUC 0.40) and 50
+  labels lift it to AUC 0.997. Cross-network IDS transfer is a few-shot
+  *labelling* problem, not a representation-alignment one.
+- **Conformal alert-budget control (within-network).** A label-free online
+  controller re-derives the operating point from the target network's own benign
+  traffic, holding the alert rate at a 1% budget through within-network drift
+  (FPR 1.10%) while rare attacks keep alerting (Infiltration 0.84, XSS 0.70) —
+  the answer to drift *within* a network, measured to its limit against the
+  cross-network case above.
+- **Host-fusion threat rollups.** Per-flow alerts roll up into per-host threats:
+  each host shows which detectors agree, its unioned ATT&CK techniques, a
+  transparent risk score, and the real-world CTI campaign it fuses with.
 - **IDS temporal-split honesty.** A LightGBM baseline scores ROC-AUC up to
   1.0000 within-dataset but its *default* threshold collapses to F1 0.001 on
   unseen Thu–Fri attack families — the same calibration story. Re-calibrating
@@ -108,7 +118,9 @@ make train-anomaly   # benign-only autoencoder anomaly detector (MLX / torch-MPS
 make train-sequence  # per-host sequence model (MLX gated recurrence)
 make train-profile   # host-profile fan-out detector (PortScan)
 make replay          # persist top detections as ATT&CK-tagged alerts
-make eval-cross      # cross-dataset 2017 → 2018 generalization (downloads a 2018 day)
+make eval-cross         # cross-dataset 2017 → 2018 generalization (downloads a 2018 day)
+make eval-domain        # label-free domain-adaptation fixes vs few-shot (2017 → 2018)
+make eval-cross-family  # cross-family stress test: few-shot across brute-force / DoS / Bot
 ```
 
 ### API + dashboard
@@ -119,10 +131,21 @@ make ui         # React dashboard dev server on :5173 (needs make api running)
 make briefing   # print the auto-generated daily threat briefing
 ```
 
-API endpoints: `/stats`, `/campaigns` (+ `/{id}`), `/reports`, `/alerts`
-(+ `/{id}/context` for technique fusion), `/techniques` (+ `/{id}`),
+API endpoints: `/health`, `/stats`, `/campaigns` (+ `/{id}`), `/reports`,
+`/alerts` (+ `/{id}/context` for technique fusion), `/hosts` and
+`/hosts/simulated` (host-fusion threat rollups), `/techniques` (+ `/{id}`),
 `/trending`, `/feed-drift`, `/briefing`, and `/attack-navigator-layer`
 (ATT&CK Navigator export of alert/campaign technique coverage).
 
-The dashboard surfaces an ATT&CK heatmap, alert feed, campaign explorer, and an
-overview dashboard over those endpoints.
+The dashboard is a question-led three-tab storyline over those endpoints:
+
+- **Threat feed** — the fusion view. Per-host threat rollups: each host shows
+  which of the four detectors agree, its unioned ATT&CK techniques, a
+  transparent risk score, and the CTI campaign it fuses with; expandable into a
+  left-to-right evidence chain (detectors → host + techniques → matched
+  real-world campaign), with a "simulate detection" button that reveals held-out
+  detections.
+- **Landscape** — trending techniques, feed drift (PSI), the daily briefing, and
+  ATT&CK Navigator export.
+- **Model report card** — the honest evaluation story, including the
+  cross-network failure *and* its few-shot fix.

@@ -100,7 +100,14 @@ function ThreatRow({ t }: { t: HostThreat }) {
           <div className="threat-title">
             <span className="mono">{t.host}</span>
             {t.simulated && <span className="badge live">live</span>}
-            {t.fused.length > 0 && <span className="badge fusedtag">fused with intel</span>}
+            {t.fused.length > 0 && (
+              <span
+                className="badge fusedtag"
+                title="rarity x recency x corroboration — see Model report card"
+              >
+                {pct(t.fused[0].fusion.strength)} intel match
+              </span>
+            )}
           </div>
           <div className="threat-story">{story(t)}</div>
           <div>
@@ -140,7 +147,7 @@ export function ThreatFeed() {
       <div className="feed-bar">
         <span className="muted">
           {all.length} host threats · ranked by risk ·{" "}
-          <span style={{ color: "var(--warn)" }}>amber = fused with intel</span>
+          <span style={{ color: "var(--warn)" }}>amber = scored intel match</span>
         </span>
         <button
           onClick={() => queue.length && setRevealed([{ ...queue[0] }, ...revealed])}

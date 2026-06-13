@@ -110,7 +110,15 @@ def test_campaign_detail_joins_reports_and_techniques(client: TestClient) -> Non
     assert body["techniques"][0]["technique_id"] == "T1190"
     assert body["techniques"][0]["name"] == "Exploit Public-Facing App"
     assert body["reports"][0]["report_id"] == "rss:a"
+    assert "age_days" in body  # recency exposed for ranking
     assert client.get("/campaigns/nope").status_code == 404
+
+
+def test_campaigns_list_ranks_and_carries_recency(client: TestClient) -> None:
+    campaigns = client.get("/campaigns").json()
+    assert len(campaigns) == 1
+    assert "age_days" in campaigns[0]
+    assert campaigns[0]["kev_cves"] == ["CVE-2026-1111"]  # KEV-involved
 
 
 def test_alerts_endpoint_filters_by_model(client: TestClient) -> None:

@@ -69,6 +69,9 @@ def test_host_rollup_ranks_and_fuses() -> None:
     assert top.fused[0].campaign_id == "camp:web"
     assert top.fused[0].kev_cves == ["CVE-2026-5027"]
     assert 0.0 < top.fused[0].fusion.strength <= 1.0  # scored, not a flat overlap
+    # One drillable detection per detector (the /alerts/{id}/context entry points).
+    assert {a.model for a in top.alerts} == set(top.detectors)
+    assert all(a.alert_id is not None for a in top.alerts)
     assert top.risk > threats[1].risk
     assert threats[1].fused == []  # host B has no intel match
 

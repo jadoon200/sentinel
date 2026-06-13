@@ -26,6 +26,7 @@ export interface CampaignSummary {
   kev_cves: string[];
   report_count: number;
   techniques: TechniqueEvidence[];
+  age_days: number | null;
 }
 
 export interface ReportSummary {
@@ -93,6 +94,14 @@ export interface CampaignLink {
   fusion: FusionScore;
 }
 
+export interface AlertRef {
+  alert_id: number;
+  model: string;
+  score: number;
+  predicted_label: string | null;
+  techniques: string[];
+}
+
 export interface HostThreat {
   host: string;
   risk: number;
@@ -101,6 +110,7 @@ export interface HostThreat {
   predicted_labels: string[];
   true_labels: string[];
   alert_count: number;
+  alerts: AlertRef[];
   fused: CampaignLink[];
   simulated: boolean;
 }

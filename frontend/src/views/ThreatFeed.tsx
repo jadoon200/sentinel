@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, type HostThreat } from "../api";
+import { api, type AlertRef, type HostThreat } from "../api";
 
 const DETECTOR_LABEL: Record<string, string> = {
   "lightgbm-multiclass": "supervised",
@@ -13,14 +13,19 @@ function riskClass(r: number) {
   return r >= 85 ? "risk-crit" : r >= 70 ? "risk-high" : "risk-med";
 }
 
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+
 function story(t: HostThreat): string {
   const labels = t.true_labels.filter((l) => l.toUpperCase() !== "BENIGN");
   const what = labels.length ? labels.join(", ").toLowerCase() : "anomalous activity";
-  const n = t.detectors.length;
-  return `${what} — flagged by ${n} of 4 detectors`;
+  const base = `${what} — flagged by ${t.detectors.length} of 4 detectors`;
+  if (t.fused.length > 0) {
+    // Tie the badge into the sentence: which campaign, how strong, expand to see
+    // which specific detection drove it.
+    return `${base}; ${pct(t.fused[0].fusion.strength)} match to active campaign ${t.fused[0].campaign_id}`;
+  }
+  return base;
 }
-
-const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 function freshness(ageDays: number | null): string {
   if (ageDays === null) return "undated";
@@ -29,15 +34,47 @@ function freshness(ageDays: number | null): string {
   return `${Math.round(ageDays)} days old`;
 }
 
+function DetectionLine({ alert }: { alert: AlertRef }) {
+  const [open, setOpen] = useState(false);
+  // Per-detection campaign context, fetched only when the analyst drills in.
+  const ctx = useQuery({
+    queryKey: ["alertctx", alert.alert_id],
+    queryFn: () => api.alertContext(alert.alert_id),
+    enabled: open,
+  });
+  return (
+    <div className="det-line">
+      <button className="det-toggle" onClick={() => setOpen(!open)}>
+        <i className={`ti ti-chevron-${open ? "down" : "right"}`} aria-hidden="true" />{" "}
+        {DETECTOR_LABEL[alert.model] ?? alert.model}
+        {alert.techniques.length > 0 && (
+          <span className="hint"> · {alert.techniques.join(", ")}</span>
+        )}
+      </button>
+      {open && (
+        <div className="det-ctx">
+          {!ctx.data && <span className="hint">checking intel…</span>}
+          {ctx.data && ctx.data.matched_campaigns.length === 0 && (
+            <span className="hint">no campaign correlation for this detection</span>
+          )}
+          {ctx.data?.matched_campaigns.map((m) => (
+            <div key={m.campaign_id} className="hint">
+              <code>{m.campaign_id}</code> — {pct(m.fusion.strength)} match
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EvidenceChain({ t }: { t: HostThreat }) {
   return (
     <div className="chain">
       <div className="stage">
         <h4>{t.detectors.length} of 4 detectors agree</h4>
-        {t.detectors.map((d) => (
-          <div key={d} className="ev-line">
-            <i className="ti ti-check" aria-hidden="true" /> {DETECTOR_LABEL[d] ?? d}
-          </div>
+        {t.alerts.map((a) => (
+          <DetectionLine key={a.alert_id} alert={a} />
         ))}
       </div>
       <i className="ti ti-arrow-right arrow" aria-hidden="true" />

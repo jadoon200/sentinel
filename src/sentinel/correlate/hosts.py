@@ -32,6 +32,18 @@ class CampaignLink:
 
 
 @dataclass
+class AlertRef:
+    """The strongest detection per detector — the entry points for drilling into
+    a single alert's campaign context (`/alerts/{id}/context`)."""
+
+    alert_id: int
+    model: str
+    score: float
+    predicted_label: str | None
+    techniques: list[str]
+
+
+@dataclass
 class HostThreat:
     host: str
     risk: int
@@ -40,6 +52,7 @@ class HostThreat:
     predicted_labels: list[str]
     true_labels: list[str]
     alert_count: int
+    alerts: list[AlertRef] = field(default_factory=list)
     fused: list[CampaignLink] = field(default_factory=list)
     simulated: bool = False
 
@@ -83,6 +96,26 @@ def _campaign_links(techniques: set[str], ctx: FusionContext) -> list[CampaignLi
     ]
 
 
+def _alert_refs(alerts: list[Alert]) -> list[AlertRef]:
+    """One representative detection per detector — the host's strongest alert from
+    each model — so the UI can drill into each on its own campaign context."""
+    best: dict[str, Alert] = {}
+    for alert in alerts:
+        current = best.get(alert.model)
+        if current is None or alert.score > current.score:
+            best[alert.model] = alert
+    return [
+        AlertRef(
+            alert_id=a.alert_id,
+            model=a.model,
+            score=a.score,
+            predicted_label=a.predicted_label,
+            techniques=a.techniques or [],
+        )
+        for a in sorted(best.values(), key=lambda a: a.model)
+    ]
+
+
 def host_threats(session: Session, include_simulated: bool = False) -> list[HostThreat]:
     """Group alerts by source host into ranked, intel-fused threats."""
     query = select(Alert).where(Alert.source_host.is_not(None))
@@ -112,6 +145,7 @@ def host_threats(session: Session, include_simulated: bool = False) -> list[Host
                 predicted_labels=sorted({a.predicted_label for a in alerts if a.predicted_label}),
                 true_labels=sorted({a.true_label for a in alerts if a.true_label}),
                 alert_count=len(alerts),
+                alerts=_alert_refs(alerts),
                 fused=fused,
                 simulated=any(a.simulated for a in alerts),
             )

@@ -175,13 +175,39 @@ attacker beacon**. The ranking signal is real; the operating point is not,
 and tightening the threshold cannot separate sub-maximal beacons from maximal
 benign timers.
 
-Conclusion across three attempts (variance pairs 0.056, spectral AUC 0.73,
-both recall ~0): **beacon detection by periodicity alone is the wrong frame in
-this dataset** — perfect periodicity is benign infrastructure. A real beacon
-hunter needs destination reputation / JA3 / payload-size entropy, none of
-which CIC-IDS2017 flow features expose. Kept as a characterized negative; the
-detector ships behind `make ids-spectral` for the documented C2-channel
-ranking, not as an ensemble member.
+Conclusion across three periodicity attempts (variance pairs 0.056, spectral
+AUC 0.73, both recall ~0): **beacon detection by periodicity alone is the wrong
+frame in this dataset** — perfect periodicity is benign infrastructure. The
+spectral detector ships behind `make ids-spectral` for the documented C2-channel
+ranking, kept as a characterized negative.
+
+### Beacon by data-size dispersion — the signature periodicity missed (the fix)
+
+Re-framing closed the gap. An ARES C2 channel interleaves payload-less poll
+flows ("Bot - Attempted" — 67% of 2017 Bot flows) with data-carrying tasking
+flows, so a single (src→dst) channel's forward-payload **sizes are wildly
+dispersed**; a benign periodic service (NTP) sends a uniform packet every time,
+so its sizes barely move. Scoring each channel by the coefficient of variation
+of its forward bytes and mean packet length — benign-calibrated, max robust-z,
+thresholded at the benign-channel p99 — is the first detector to convert the
+beacon ranking signal into operating-point recall. Reproduce: `make ids-beacon`.
+
+| Frame | Bot channel recall @~1% FPR | channel ROC-AUC |
+|---|---|---|
+| periodicity (variance pairs / spectral) | 0.000–0.056 | 0.73–0.83 |
+| **data-size dispersion (`ids/beacon.py`)** | **1.000 (5/5)** | **0.995** |
+
+The dispersion statistics are behavioral (size CV), never an IP/port/timestamp,
+so the no-topology-leak rule holds. **Honest caveat:** validated at the channel
+level on only the *five* 2017 C2 channels (all five hosts → 205.174.165.73), so
+this is a strong foothold, not a robustly-closed gap. The driving mechanism is
+confirmed cross-network on CSE-CIC-IDS2018 Bot (286k flows: **50.3% empty polls
+≤1 byte + 49.7% data flows >100 bytes** — the bimodality that produces high
+per-channel size variance); 2018's public CSVs drop IPs, so the channel
+statistic itself cannot be recomputed there. Takeaway: the earlier "needs
+payload-size entropy we don't have" conclusion was half-right — size *entropy*
+(content) is unavailable, but size *dispersion* (statistics) was in the features
+all along, and it is the discriminator periodicity could not see.
 
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the

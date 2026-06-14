@@ -1,6 +1,6 @@
 # SENTINEL — Model Card
 
-This card documents the five models in the SENTINEL threat-intelligence fusion
+This card documents the six models in the SENTINEL threat-intelligence fusion
 platform, plus the **fusion scoring layer** that ranks the correlations they
 feed. Every number is traceable to [`docs/EVAL.md`](EVAL.md), the complete
 evaluation record; this card summarizes, it does not introduce new results.
@@ -122,11 +122,27 @@ evaluation record; this card summarizes, it does not introduce new results.
   which port-scans the internal subnet after the meterpreter compromise. Those
   flows are labeled BENIGN in the corrected ground truth; the detector is
   flagging real lateral scanning the labels miss.
-- **Beacon foothold:** per-(src→dst) pair grouping puts Bot recall above zero
-  for the first time (**0.056** at 0.9% FPR, window ROC-AUC 0.83) by isolating
-  each channel; per-host windows interleave benign traffic and destroy the
-  timer pattern. Ranking signal exists, operating-point recall does not yet —
-  host grouping stays the deployed default.
+- **Beacon foothold → fix:** per-(src→dst) pair grouping first put Bot recall
+  above zero (0.056 @0.9% FPR by isolating each channel), but periodicity could
+  only *rank*, not detect — benign timers (NTP) are more periodic than a jittered
+  beacon. The fix changes the frame to **data-size dispersion** (model 6 below):
+  an ARES C2 channel mixes empty polls and data tasking, so its forward-byte CV
+  is extreme while a benign timer's is ~0.
+
+### 6. Beacon detector — channel data-size dispersion (the C2 fix)
+
+- **Task:** detect C2 beacon channels the periodicity detectors could only rank.
+- **Architecture:** per (src→dst) channel, coefficient of variation of forward
+  bytes + mean packet length; max robust-z, benign-calibrated, thresholded at the
+  benign-channel p99. No neural net; behavioral size statistics only (no
+  IP/port/timestamp). Code: `src/sentinel/ids/beacon.py` (`make ids-beacon`).
+- **Key numbers (CIC-IDS2017, temporal split, channel level):** Bot recall
+  **1.000 (5/5)** at ~1.6% FPR, ROC-AUC **0.995** — vs 0.000–0.056 for all three
+  periodicity attempts.
+- **Honest caveat:** only **five** 2017 C2 channels exist, so this is a strong
+  foothold, not a robustly-closed gap. The mechanism is confirmed on
+  CSE-CIC-IDS2018 Bot (286k flows, ≈50% empty polls + ≈50% data flows); 2018's
+  public CSVs drop IPs so the channel statistic can't be recomputed there.
 
 ## Fusion scoring layer (correlation ranking — not a trained model)
 
@@ -174,12 +190,15 @@ evaluation record; this card summarizes, it does not introduce new results.
 | Autoencoder | temporal, unseen families | Infiltration 0.844 / DDoS 0.705 | overall 0.268 recall @6.3% FPR |
 | Sequence model | temporal, per-host windows | XSS 1.000 / Brute Force ~0.96 | scan/beacon 0.000 (inverted) |
 | Host-profile | temporal, fan-out stats | PortScan 0.998 @1.15% FPR | Bot 0.000 deployed (0.056 per-pair) |
+| Beacon (dispersion) | temporal, channel level | Bot 1.000 (5/5) @1.6% FPR, AUC 0.995 | only 5 C2 channels — foothold, not robust |
 
 ## Known limitations & failure modes
 
-- **Bot/beacon recall ≈ 0** at deployed operating points across all detectors;
-  only the extreme tail of per-pair periodicity scoring clears the threshold
-  (the ARES beacon's cadence overlaps benign periodic services like NTP).
+- **Bot/beacon recall** was ≈ 0 for all three periodicity detectors (benign NTP
+  timers are more periodic than a jittered beacon). The data-size **dispersion**
+  detector (model 6) lifts Bot channel recall to 1.000 (5/5) @1.6% FPR — but on
+  only five 2017 C2 channels, so treat it as a strong foothold, not a closed gap,
+  pending validation on a dataset with more beacon channels and retained IPs.
 - **SQL Injection recall = 0** for both the autoencoder and the sequence model.
 - **FPR drift under distribution shift:** the autoencoder's observed 6.3% FPR
   exceeds the calibrated 1% because Thu–Fri benign traffic differs from Mon–Wed

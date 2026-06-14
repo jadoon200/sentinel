@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing refresh eval-cross eval-domain eval-cross-family migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon api ui briefing refresh eval-cross eval-domain eval-cross-family migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -60,6 +60,10 @@ train-profile:
 # Spectral beacon detector — documented C2-channel ranking (honest negative)
 ids-spectral:
 	python -m sentinel.ids.spectral
+
+# Beacon detector by data-size dispersion — the C2 signature periodicity missed
+ids-beacon:
+	python -m sentinel.ids.beacon
 
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:

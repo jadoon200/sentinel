@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing eval-cross eval-domain eval-cross-family migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral api ui briefing refresh eval-cross eval-domain eval-cross-family migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -80,6 +80,10 @@ eval-cross:
 # Print the auto-generated daily threat briefing (needs make up + make api)
 briefing:
 	curl -s localhost:8000/briefing
+
+# Full graph refresh: ingest -> enrich -> replay (cron/launchd-friendly wrapper)
+refresh:
+	./scripts/refresh.sh
 
 # Serve the read-only knowledge-graph API on :8000 (needs make up)
 api:

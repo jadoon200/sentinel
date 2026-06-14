@@ -45,6 +45,17 @@ class Settings(BaseSettings):
         "microsoft-security": "https://www.microsoft.com/en-us/security/blog/feed/",
         "mandiant": "https://www.mandiant.com/resources/blog/rss.xml",
         "grahamcluley": "https://grahamcluley.com/feed/",
+        "darkreading": "https://www.darkreading.com/rss.xml",
+        "securityweek": "https://feeds.feedburner.com/securityweek",
+        "helpnetsecurity": "https://www.helpnetsecurity.com/feed/",
+        "theregister-security": "https://www.theregister.com/security/headlines.atom",
+        "therecord": "https://therecord.media/feed/",
+        "tenable": "https://www.tenable.com/blog/feed",
+        "sucuri": "https://blog.sucuri.net/feed",
+        "sentinelone": "https://www.sentinelone.com/blog/feed/",
+        "crowdstrike": "https://www.crowdstrike.com/en-us/blog/feed/",
+        "ncsc-uk": "https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml",
+        "fortinet": "https://feeds.fortinet.com/fortinet/blog/threat-research",
     }
 
     attack_stix_url: str = (

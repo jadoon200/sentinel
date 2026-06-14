@@ -59,7 +59,7 @@ class HostThreat:
 
 # Transparent risk rule. Each input is bounded and named so the score is
 # explainable on the dashboard rather than a black box:
-#   detector agreement  — how many of the 4 detectors independently flagged the
+#   detector agreement  — how many of the 5 detectors independently flagged the
 #                         host (the ensemble's strongest signal)
 #   severity            — the host's peak supervised confidence (0..1)
 #   intel fusion        — bonus scaled by the *strength* of the best campaign
@@ -67,14 +67,15 @@ class HostThreat:
 #                         so a rare, recent, well-evidenced match lifts risk far
 #                         more than a coincidental shared tag; a further bump if
 #                         that campaign involves KEV (exploited) CVEs
-_DETECTOR_WEIGHT = 14  # per distinct detector, capped at 4 -> 56
+_N_DETECTORS = 5  # supervised, autoencoder, sequence, profile, beacon
+_DETECTOR_WEIGHT = 11  # per distinct detector, capped at 5 -> 55
 _SEVERITY_WEIGHT = 24
 _FUSION_BONUS = 14
 _KEV_BONUS = 6
 
 
 def _risk(n_detectors: int, severity: float, fused: list[CampaignLink]) -> int:
-    score = min(n_detectors, 4) * _DETECTOR_WEIGHT + severity * _SEVERITY_WEIGHT
+    score = min(n_detectors, _N_DETECTORS) * _DETECTOR_WEIGHT + severity * _SEVERITY_WEIGHT
     if fused:
         best_strength = max(link.fusion.strength for link in fused)
         score += _FUSION_BONUS * best_strength

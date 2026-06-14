@@ -214,7 +214,8 @@ take automated enforcement action against individuals or hosts.
 | [NVD CVE API](https://nvd.nist.gov/developers/vulnerabilities) | OSINT ingestion | U.S. government public data |
 | [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | OSINT ingestion | U.S. government public data |
 | [MITRE ATT&CK](https://attack.mitre.org/) | technique catalog + procedures | © The MITRE Corporation, used per ATT&CK terms of use |
-| [AlienVault OTX](https://otx.alienvault.com/) | OSINT ingestion | community threat feed |
+| [AlienVault OTX](https://otx.alienvault.com/) | OSINT ingestion | community threat feed (optional, free key) |
+| 28 keyless CTI RSS/Atom feeds (vendor research blogs + CERTs: Talos, Unit42, Mandiant, CrowdStrike, Securelist, Project Zero, NCSC-UK, …) | OSINT ingestion | public feeds; each report tagged with its publisher for provenance |
 | [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) | IDS train/eval | corrected variant, Engelen et al., WTMC 2021 |
 | [TRAM](https://github.com/center-for-threat-informed-defense/tram) | mapper benchmark | analyst-annotated, Center for Threat-Informed Defense |
 

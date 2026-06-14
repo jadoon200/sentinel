@@ -19,9 +19,10 @@ frontend's "SEA map" sub-item was not built. Polish so far: model card shipped
 Research extensions that exceeded the original plan, all recorded in
 [docs/EVAL.md](EVAL.md):
 
-- **Four-detector IDS ensemble** — supervised LightGBM, benign-only
-  autoencoder, per-host sequence model, host-profile fan-out detector; each
-  covers a different attack family.
+- **Five-detector IDS ensemble** — supervised LightGBM, benign-only
+  autoencoder, per-host sequence model, host-profile fan-out detector, and the
+  beacon-dispersion detector; each covers a different attack family, and together
+  they cover 7/7 unseen Thu–Fri families at recall ≥0.93 (`make eval-ensemble`).
 - **Conformal alert-budget control** — split-conformal p-values with a
   label-free online controller that holds the alert rate at target through
   benign drift.

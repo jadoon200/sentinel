@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     # the recency factor in the alert↔campaign fusion strength (correlate/fusion.py).
     fusion_recency_half_life_days: float = 30.0
 
+    # Application-layer SQLi detector: free public payload corpora, cached here
+    # (gitignored). Two independent sources enable the cross-corpus honesty eval.
+    sqli_data_dir: Path = Path("data/sqli")
+    sqli_corpus_urls: dict[str, str] = {
+        "httpparams": "https://raw.githubusercontent.com/Morzeux/HttpParamsDataset/master/payload_full.csv",
+        "sqliv2": "https://raw.githubusercontent.com/ferasalnaem/sqli-detection-using-ML/main/dataset/kaggleDataset/sqliv2/sqliv2.csv",
+    }
+
     # IDS training (corrected CIC-IDS2017; local MLflow file store by default,
     # point at http://localhost:5001 when the compose MLflow server is up)
     ids_data_dir: Path = Path("data/cicids2017")

@@ -218,6 +218,36 @@ benign traffic differs from Mon–Wed benign traffic (distribution shift), and
 low-rate scans/botnet beacons reconstruct too well to alert (they look like
 small normal flows). Ensemble + campaign-context fusion is the next layer.
 
+## Application-layer SQLi detection — a different modality (`make sqli`)
+
+SQL injection is invisible to every flow detector, and not for lack of trying:
+CIC-IDS2017 has **12 SQLi flows, none in training**, and they are statistically
+**indistinguishable from benign HTTP** at the flow level (max robust-z of the 12
+vs benign port-80 traffic is **1.0** — they sit inside the benign distribution).
+The malicious signal is the SQL string in the request *payload*, which
+CICFlowMeter's size/timing/count features never capture. This is a genuine
+feature ceiling, not a tuning gap — so SQLi gets a different modality: a
+character n-gram (TF-IDF `char_wb` 1–3) + logistic-regression classifier over
+request payloads, the application-layer / WAF analogue of the flow IDS, mapped
+to T1190. Code: `src/sentinel/ids/sqli.py`.
+
+Validated the SENTINEL way — **cross-corpus** (train one public payload source,
+test a different one), so the number reflects generalization, not memorization:
+
+| Eval | ROC-AUC | Precision | Recall | F1 |
+|---|---|---|---|---|
+| within-corpus (avg of 2 sources, 3 seeds) | 1.000 | 1.000 | 0.995 | 0.997 |
+| cross: HttpParams → Kaggle SQLiV2 | 0.997 | 1.000 | 0.969 | 0.984 |
+| cross: Kaggle SQLiV2 → HttpParams | 1.000 | 1.000 | 0.997 | 0.998 |
+
+Char n-grams carry the generalization: they key on SQL syntax (quotes, comment
+markers, `union select`, `or 1=1`) that survives across payload styles, where
+word tokens would overfit one corpus's vocabulary. Corpora are free and public
+(Morzeux HttpParamsDataset; Kaggle SQLiV2), cached under `data/sqli/`. Honest
+scope: this inspects payloads, not netflow — it complements the flow ensemble
+rather than fixing it, and needs an HTTP-request feed to raise live in-platform
+alerts (the flow replay has no payloads to score).
+
 # Technique mapper evaluation
 
 Zero-shot mapping of CTI sentences to ATT&CK techniques, evaluated against

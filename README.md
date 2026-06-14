@@ -75,6 +75,12 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   detector (PortScan 0.998), and a data-size-dispersion beacon detector that
   lifts Bot channel recall from ~0 to 5/5 @1.6% FPR (a foothold — only 5 C2
   channels; mechanism confirmed on 2018 Bot).
+- **SQL injection, where flows can't see it.** SQLi is invisible to every flow
+  detector (12 flows, none in training, indistinguishable from benign HTTP — a
+  feature ceiling, not a tuning gap), so it gets a payload (WAF-style) detector:
+  char n-grams + logistic regression over request strings, mapped to T1190 and
+  validated **cross-corpus** (train one public payload source, test another) at
+  F1 **0.984 / 0.998** — generalization, not memorization.
 - **Technique mapper, hybrid retrieval.** Zero-shot mapping over the full
   enterprise ATT&CK catalog (697 techniques), benchmarked on 10,411 TRAM
   sentences: BM25 + dense reciprocal-rank fusion with procedure-enriched docs
@@ -89,7 +95,7 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
 
 Python 3.12 (conda) · SQLAlchemy/Alembic · PostgreSQL · Prefect · httpx · MLflow · LightGBM/PyTorch · MLX (optional, Apple silicon) · FastAPI · React/TypeScript · Docker Compose · GitHub Actions
 
-All data sources are free: [NVD CVE API](https://nvd.nist.gov/developers/vulnerabilities), [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog), [MITRE ATT&CK](https://attack.mitre.org/), **28 keyless CTI RSS/Atom feeds** (vendor research blogs + CERTs — Talos, Unit42, Mandiant, CrowdStrike, Securelist, Project Zero, NCSC-UK, …), [AlienVault OTX](https://otx.alienvault.com/) (optional free key), [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html), [CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html), and [TRAM](https://github.com/center-for-threat-informed-defense/tram). A typical refresh ingests ~600 reports across ~29 sources into the graph; `make refresh` runs the full ingest → enrich → replay pipeline (cron-friendly).
+All data sources are free: [NVD CVE API](https://nvd.nist.gov/developers/vulnerabilities), [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog), [MITRE ATT&CK](https://attack.mitre.org/), **28 keyless CTI RSS/Atom feeds** (vendor research blogs + CERTs — Talos, Unit42, Mandiant, CrowdStrike, Securelist, Project Zero, NCSC-UK, …), [AlienVault OTX](https://otx.alienvault.com/) (optional free key), [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html), [CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html), public SQLi payload corpora (HttpParamsDataset, Kaggle SQLiV2), and [TRAM](https://github.com/center-for-threat-informed-defense/tram). A typical refresh ingests ~600 reports across ~29 sources into the graph; `make refresh` runs the full ingest → enrich → replay pipeline (cron-friendly).
 
 ## Quickstart
 

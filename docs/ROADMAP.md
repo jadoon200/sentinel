@@ -44,6 +44,11 @@ Research extensions that exceeded the original plan, all recorded in
   roll up into per-host threats joined to CTI campaigns, with detector
   agreement, unioned ATT&CK techniques, and a transparent risk score scaled by
   the best campaign's fusion strength.
+- **SQL injection — flow ceiling → payload detector.** SQLi is invisible to
+  every flow detector (12 flows, none in training, indistinguishable from benign
+  HTTP — a feature ceiling), so it gets a different modality: a char-n-gram +
+  logistic-regression payload (WAF) detector (`ids/sqli.py`, T1190) validated
+  cross-corpus at F1 0.984/0.998 on two free public payload sources.
 - **Beacon detection — periodicity negative → dispersion fix.** Three
   periodicity attempts (variance pairs, Schuster periodogram) only *ranked* Bot
   (AUC ≤0.83, recall ≤0.056) — benign timers out-periodic the beacon. Re-framing

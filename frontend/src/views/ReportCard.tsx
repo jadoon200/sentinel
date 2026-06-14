@@ -14,6 +14,13 @@ const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
   ["few-shot: +50 labelled flows", "1.000", "1.00", "good"],
 ];
 
+// SQLi payload detector — F1, within-corpus vs cross-corpus (the honest test).
+const sqliEval: [string, string][] = [
+  ["within-corpus (avg of 2 sources)", "0.997"],
+  ["cross-corpus: HTTP params → Kaggle", "0.984"],
+  ["cross-corpus: Kaggle → HTTP params", "0.998"],
+];
+
 export function ReportCard() {
   return (
     <>
@@ -91,6 +98,34 @@ export function ReportCard() {
           — a foothold (mechanism confirmed on 2018 Bot). Technique mapper: zero-shot over 697 ATT&CK
           techniques, parent hit@5 0.690 on 10,411 TRAM sentences. Autoencoder backend: MLX, 3.3×
           faster than torch at recall parity (10 seeds).
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>SQL injection — the gap flow data can't see</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          CIC-IDS2017 has 12 SQLi flows, none in training, and they're statistically identical to
+          benign HTTP at the flow level — the attack lives in the request <i>payload</i>, which
+          netflow features never capture, so every flow detector scores it <b>0</b>. SQLi gets a
+          different modality: a payload (WAF-style) detector — character n-grams + logistic
+          regression over HTTP request strings, mapped to T1190.
+        </p>
+        <p className="muted" style={{ marginTop: 0, marginBottom: 8 }}>
+          F1, validated <b>cross-corpus</b> — train on one public payload source, test on another —
+          the same generalization bar as the IDS cross-network eval:
+        </p>
+        {sqliEval.map(([name, f1]) => (
+          <div key={name} className="fix-row">
+            <span className="fix-name">{name}</span>
+            <div className="fix-bar">
+              <div className="fix-fill fix-good" style={{ width: `${Number(f1) * 100}%` }} />
+            </div>
+            <span className="fix-val fix-good">F1 {f1}</span>
+          </div>
+        ))}
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Honest scope: this inspects payloads, not flows — it complements the flow ensemble rather
+          than fixing it, and needs an HTTP-request feed to raise live alerts in-platform.
         </p>
       </section>
 

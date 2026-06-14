@@ -1,6 +1,6 @@
 # SENTINEL — Model Card
 
-This card documents the six models in the SENTINEL threat-intelligence fusion
+This card documents the seven models in the SENTINEL threat-intelligence fusion
 platform, plus the **fusion scoring layer** that ranks the correlations they
 feed. Every number is traceable to [`docs/EVAL.md`](EVAL.md), the complete
 evaluation record; this card summarizes, it does not introduce new results.
@@ -144,6 +144,25 @@ evaluation record; this card summarizes, it does not introduce new results.
   CSE-CIC-IDS2018 Bot (286k flows, ≈50% empty polls + ≈50% data flows); 2018's
   public CSVs drop IPs so the channel statistic can't be recomputed there.
 
+### 7. Application-layer SQLi detector — payload inspection (different modality)
+
+- **Task:** detect SQL injection, which is invisible to every flow detector —
+  CIC-IDS2017 has 12 SQLi flows, none in training, statistically identical to
+  benign HTTP (max robust-z 1.0). The signal is the SQL string in the request
+  payload, not the netflow.
+- **Architecture:** character n-gram TF-IDF (`char_wb`, 1–3) + logistic
+  regression over request payloads — the application-layer / WAF analogue of the
+  flow IDS. Maps to T1190. Code: `src/sentinel/ids/sqli.py` (`make sqli`).
+- **Eval protocol:** within-corpus (3 seeds) **and cross-corpus** (train one
+  public payload source, test another), the same generalization bar as the IDS
+  cross-dataset eval. Free public corpora (HttpParamsDataset, Kaggle SQLiV2).
+- **Key numbers:** within-corpus F1 **0.997**; cross-corpus F1 **0.984 / 0.998**
+  (recall 0.969 / 0.997, precision ~1.0). It generalizes across sources, not just
+  within one.
+- **Honest scope:** a different *modality* — it inspects payloads, not flows, so
+  it complements the flow ensemble rather than fixing it, and needs an
+  HTTP-request feed to raise live in-platform alerts (the flow replay has none).
+
 ## Fusion scoring layer (correlation ranking — not a trained model)
 
 - **Task:** rank the join between an IDS alert (or per-host rollup) and an
@@ -191,6 +210,7 @@ evaluation record; this card summarizes, it does not introduce new results.
 | Sequence model | temporal, per-host windows | XSS 1.000 / Brute Force ~0.96 | scan/beacon 0.000 (inverted) |
 | Host-profile | temporal, fan-out stats | PortScan 0.998 @1.15% FPR | Bot 0.000 deployed (0.056 per-pair) |
 | Beacon (dispersion) | temporal, channel level | Bot 1.000 (5/5) @1.6% FPR, AUC 0.995 | only 5 C2 channels — foothold, not robust |
+| SQLi (payload) | cross-corpus, 2 public sources | F1 0.984 / 0.998 cross-corpus | payload modality, not netflow — needs HTTP feed to alert |
 
 ## Known limitations & failure modes
 
@@ -199,7 +219,10 @@ evaluation record; this card summarizes, it does not introduce new results.
   detector (model 6) lifts Bot channel recall to 1.000 (5/5) @1.6% FPR — but on
   only five 2017 C2 channels, so treat it as a strong foothold, not a closed gap,
   pending validation on a dataset with more beacon channels and retained IPs.
-- **SQL Injection recall = 0** for both the autoencoder and the sequence model.
+- **SQL Injection is undetectable at the flow level** (recall 0 for every flow
+  detector) — 12 flows, none in training, indistinguishable from benign HTTP. It
+  is instead handled by the application-layer payload detector (model 7, F1 0.98+
+  cross-corpus), a different modality; the flow ceiling stands by design.
 - **FPR drift under distribution shift:** the autoencoder's observed 6.3% FPR
   exceeds the calibrated 1% because Thu–Fri benign traffic differs from Mon–Wed
   benign traffic. Thresholds calibrated on one period do not transfer cleanly.

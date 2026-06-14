@@ -74,10 +74,16 @@ export function ReportCard() {
             </div>
           ))}
         </div>
-        <p style={{ marginBottom: 0 }}>
+        <p style={{ marginBottom: 8 }}>
           Even Bot — where the blind 2017 model ranks <i>worse than a coin flip</i> (AUC 0.40) — is
           recovered to AUC 0.997. Cross-network transfer is a <i>few-shot</i> problem: the
           unsupervised detectors surface candidates, an analyst confirms ~50, the model adapts.
+        </p>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          And the budget is small (measured, 5 seeds): <b>~50 labels reach ≥0.88 recall, ~100 reach
+          ≥0.97</b>. We also tried <i>active</i> learning — labelling the flows the blind model is
+          least sure about — and it <b>underperforms random</b>: a transfer-collapsed model's
+          confidence can't pick informative flows, so random balanced sampling wins.
         </p>
       </section>
 

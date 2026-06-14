@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -76,6 +76,10 @@ replay:
 # Cross-family few-shot study: the cross-network fix (downloads 2018 days)
 eval-cross-family:
 	python scripts/eval_cross_family.py
+
+# Label-efficiency curve: how few target labels suffice, random vs active selection
+eval-label-efficiency:
+	python scripts/eval_label_efficiency.py
 
 # Domain-adaptation study: can we beat the 2017->2018 transfer failure?
 eval-domain:

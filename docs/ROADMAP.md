@@ -34,7 +34,11 @@ Research extensions that exceeded the original plan, all recorded in
   ~50 labelled target flows recover 0.95–0.99 recall across three attack
   families (brute-force, DoS, Bot) on contamination-free held-out splits.
   Cross-network IDS transfer is a few-shot labelling problem
-  (`sentinel/ids/domain_adapt.py`).
+  (`sentinel/ids/domain_adapt.py`). The budget is measured (multi-seed
+  label-efficiency curve, `make eval-label-efficiency`): ~50 labels reach ≥0.88
+  recall, ~100 reach ≥0.97 — and *active* (uncertainty) selection underperforms
+  random, since a transfer-collapsed model's confidence can't pick informative
+  flows.
 - **Deep fusion scoring** — the headline join, hardened past set overlap. Each
   alert↔campaign match is scored by a calibrated fusion strength = technique
   rarity (IDF over the report corpus) × campaign recency (age decay) ×

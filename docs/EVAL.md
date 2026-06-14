@@ -559,3 +559,29 @@ practical recipe falls out of the ensemble: the unsupervised detectors
 network, an analyst confirms ~50, and the supervised model adapts to near-
 perfect recall. A handful of labels goes remarkably far. Together they are the project's thesis: *report the number that
 survives a network change, and build the mechanism that makes it survivable.*
+
+### Label efficiency — how few, and does active learning help? (`scripts/eval_label_efficiency.py`)
+
+Two follow-ups to "50 labels works": the full budget curve, and whether *active*
+(uncertainty) selection beats random. Both multi-seed (5 seeds), recall @1% FPR,
+disjoint label-pool/test split.
+
+| Family | baseline | N=10 | N=25 | N=50 | N=100 | N=200 |
+|---|---|---|---|---|---|---|
+| brute-force | 0.000 | 0.79 | 0.92 | 0.80 ±.40 | **1.00** | 0.95 |
+| DoS | 0.000 | 0.57 | 0.25 | 0.91 | 0.84 | **0.97** |
+| Bot | 0.000 | 0.39 | 0.69 | 0.88 | **0.97** | 0.95 |
+
+*(random balanced selection, mean over 5 seeds)*
+
+- **The budget is small: ~50 labels reach ≥0.88, ~100 reach ≥0.97** across all
+  three families. Budgets of 10–25 are viable but high-variance (brute-force at
+  N=50 spans 0.4–1.0 across seeds, hence 0.80 ±0.40) — multi-seed is why that
+  honesty is visible rather than a lucky single run.
+- **Active learning *underperforms* random here.** Uncertainty sampling — label
+  the target flows the blind 2017 model is least sure about — lands at ≤0.75
+  (brute-force), ~0–0.38 (DoS), and ~0 (Bot), well below random at every budget.
+  The reason is exactly the cross-network collapse: a transfer-broken source
+  model's confidence is meaningless on the new distribution, so "most uncertain"
+  selects uninformative flows. **Random balanced sampling is the robust choice**
+  — the simpler method wins, and now that's measured, not assumed.

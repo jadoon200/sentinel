@@ -87,7 +87,7 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
 
 Python 3.12 (conda) · SQLAlchemy/Alembic · PostgreSQL · Prefect · httpx · MLflow · LightGBM/PyTorch · MLX (optional, Apple silicon) · FastAPI · React/TypeScript · Docker Compose · GitHub Actions
 
-All data sources are free: [NVD CVE API](https://nvd.nist.gov/developers/vulnerabilities), [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog), [MITRE ATT&CK](https://attack.mitre.org/), [AlienVault OTX](https://otx.alienvault.com/), RSS/Atom CTI feeds, [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html), [CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html), and [TRAM](https://github.com/center-for-threat-informed-defense/tram).
+All data sources are free: [NVD CVE API](https://nvd.nist.gov/developers/vulnerabilities), [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog), [MITRE ATT&CK](https://attack.mitre.org/), **28 keyless CTI RSS/Atom feeds** (vendor research blogs + CERTs — Talos, Unit42, Mandiant, CrowdStrike, Securelist, Project Zero, NCSC-UK, …), [AlienVault OTX](https://otx.alienvault.com/) (optional free key), [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html), [CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html), and [TRAM](https://github.com/center-for-threat-informed-defense/tram). A typical refresh ingests ~600 reports across ~29 sources into the graph; `make refresh` runs the full ingest → enrich → replay pipeline (cron-friendly).
 
 ## Quickstart
 

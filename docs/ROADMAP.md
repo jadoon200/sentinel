@@ -48,7 +48,12 @@ Research extensions that exceeded the original plan, all recorded in
   characterized negative.
 - **Hybrid BM25 + dense technique mapper** — reciprocal-rank fusion with
   procedure-enriched docs, beating the cross-encoder rerank at bi-encoder cost.
-- **Temporal analytics** — trending techniques, feed drift (PSI), daily
-  briefing.
+- **Temporal analytics** — trending techniques, feed drift (PSI, additively
+  smoothed), daily briefing; windowed on publish date so a one-shot ingest
+  still yields a real timeline.
+- **Multi-source CTI ingestion** — 28 keyless RSS/Atom feeds (vendor research +
+  CERTs) with per-publisher provenance, browser-UA fetching, and a cron-friendly
+  `make refresh` (ingest → enrich → replay). A refresh pulls ~600 reports across
+  ~29 sources; OTX adds label-bearing pulses once a free key is set.
 - **ATT&CK Navigator export** — alert/campaign technique coverage as a
   Navigator layer.

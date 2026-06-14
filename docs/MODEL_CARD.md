@@ -252,7 +252,7 @@ production traffic from real users.
   victim's scanning as benign.
 - **Run the detectors as an ensemble.** They are complementary by construction
   — supervised (seen families ≈ 1.0), autoencoder (Infiltration/DDoS),
-  sequence (web attacks), host-profile (PortScan) — and the replay service runs
-  all of them. No single model is sufficient.
+  sequence (web attacks), host-profile (PortScan), beacon-dispersion (Bot C2) —
+  and the replay service runs all five. No single model is sufficient.
 - **Keep a human in the loop.** Mapper suggestions and IDS alerts are ranked
   candidates for analyst review, not verdicts.

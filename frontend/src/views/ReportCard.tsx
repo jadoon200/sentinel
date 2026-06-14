@@ -3,6 +3,7 @@ const detectors = [
   ["Benign-only autoencoder", "unseen-family anomalies", "Infiltration 0.84 · DDoS 0.71", "ti-wave-sine"],
   ["Per-host sequence model", "slow web attacks", "XSS 1.00 · brute-force ~0.96", "ti-timeline"],
   ["Host-profile fan-out", "scans & sweeps", "PortScan 0.998", "ti-affiliate"],
+  ["Beacon dispersion", "C2 beacons", "Bot 5/5 @1.6% FPR*", "ti-radar-2"],
 ];
 
 const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
@@ -74,7 +75,7 @@ export function ReportCard() {
       </section>
 
       <section className="panel">
-        <h2>Four detectors, complementary by design</h2>
+        <h2>Five detectors, complementary by design</h2>
         {detectors.map(([name, role, score, icon]) => (
           <div key={name} className="roster-row">
             <i className={`ti ${icon}`} aria-hidden="true" />
@@ -86,8 +87,10 @@ export function ReportCard() {
           </div>
         ))}
         <p className="muted" style={{ marginBottom: 0 }}>
-          Technique mapper: zero-shot over 697 ATT&CK techniques, parent hit@5 0.690 on 10,411 TRAM
-          sentences. Autoencoder backend: MLX, 3.3× faster than torch at recall parity (10 seeds).
+          *Beacon: data-size dispersion beats periodicity on C2, but validated on only 5 C2 channels
+          — a foothold (mechanism confirmed on 2018 Bot). Technique mapper: zero-shot over 697 ATT&CK
+          techniques, parent hit@5 0.690 on 10,411 TRAM sentences. Autoencoder backend: MLX, 3.3×
+          faster than torch at recall parity (10 seeds).
         </p>
       </section>
 

@@ -7,6 +7,7 @@ const DETECTOR_LABEL: Record<string, string> = {
   autoencoder: "anomaly",
   sequence: "sequence",
   profile: "profile",
+  beacon: "beacon (C2)",
 };
 
 function riskClass(r: number) {
@@ -18,7 +19,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 function story(t: HostThreat): string {
   const labels = t.true_labels.filter((l) => l.toUpperCase() !== "BENIGN");
   const what = labels.length ? labels.join(", ").toLowerCase() : "anomalous activity";
-  const base = `${what} — flagged by ${t.detectors.length} of 4 detectors`;
+  const base = `${what} — flagged by ${t.detectors.length} of 5 detectors`;
   if (t.fused.length > 0) {
     // Tie the badge into the sentence: which campaign, how strong, expand to see
     // which specific detection drove it.
@@ -72,7 +73,7 @@ function EvidenceChain({ t }: { t: HostThreat }) {
   return (
     <div className="chain">
       <div className="stage">
-        <h4>{t.detectors.length} of 4 detectors agree</h4>
+        <h4>{t.detectors.length} of 5 detectors agree</h4>
         {t.alerts.map((a) => (
           <DetectionLine key={a.alert_id} alert={a} />
         ))}

@@ -2,7 +2,7 @@
 
 **Cyber threat intelligence fusion platform** — correlates open-source threat intelligence (OSINT) with ML-based network intrusion detection, the way real SOCs and intelligence fusion centres do.
 
-> OSINT ingestion, NLP technique mapping over the full ATT&CK catalog, campaign correlation, a four-detector IDS ensemble with an honest cross-dataset/temporal evaluation, a measured cross-network transfer fix (few-shot domain adaptation), conformal alert-budget control, host-fusion threat rollups, temporal analytics, a read-only knowledge-graph API, and a React/TypeScript dashboard are all in place. Remaining polish: demo video + blog post. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> OSINT ingestion, NLP technique mapping over the full ATT&CK catalog, campaign correlation, a five-detector IDS ensemble with an honest cross-dataset/temporal evaluation, a measured cross-network transfer fix (few-shot domain adaptation), conformal alert-budget control, host-fusion threat rollups, temporal analytics, a read-only knowledge-graph API, and a React/TypeScript dashboard are all in place. Remaining polish: demo video + blog post. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -68,11 +68,13 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   1.0000 within-dataset but its *default* threshold collapses to F1 0.001 on
   unseen Thu–Fri attack families — the same calibration story. Re-calibrating
   the threshold from benign traffic alone (no attack labels) recovers F1 0.800.
-- **Four-detector ensemble, per-family coverage.** Detectors cover different
+- **Five-detector ensemble, per-family coverage.** Detectors cover different
   families by construction: supervised LightGBM (seen families ≈ 1.0),
   benign-only autoencoder (Infiltration 0.84 / DDoS 0.71 / XSS 0.67), per-host
   sequence model (XSS 1.00 / Web Brute Force 0.94), host-profile fan-out
-  detector (PortScan 0.998).
+  detector (PortScan 0.998), and a data-size-dispersion beacon detector that
+  lifts Bot channel recall from ~0 to 5/5 @1.6% FPR (a foothold — only 5 C2
+  channels; mechanism confirmed on 2018 Bot).
 - **Technique mapper, hybrid retrieval.** Zero-shot mapping over the full
   enterprise ATT&CK catalog (697 techniques), benchmarked on 10,411 TRAM
   sentences: BM25 + dense reciprocal-rank fusion with procedure-enriched docs
@@ -146,7 +148,7 @@ API endpoints: `/health`, `/stats`, `/campaigns` (+ `/{id}`), `/reports`,
 The dashboard is a question-led three-tab storyline over those endpoints:
 
 - **Threat feed** — the fusion view. Per-host threat rollups: each host shows
-  which of the four detectors agree, its unioned ATT&CK techniques, a
+  which of the five detectors agree, its unioned ATT&CK techniques, a
   transparent risk score, and the CTI campaign it fuses with; expandable into a
   left-to-right evidence chain (detectors → host + techniques → matched
   real-world campaign, with a fusion-strength meter and its rarity/recency

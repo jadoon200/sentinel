@@ -210,6 +210,58 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
             )
         )
 
+    # Fifth detector: beacon-by-data-size-dispersion (the C2 signature periodicity
+    # missed — see docs/EVAL.md). Channels need the payload-less "- Attempted"
+    # polls that x_test drops, so build them from the raw Thu-Fri flows; an ARES
+    # C2 channel's verdict maps to T1071.001 (web-protocol C2).
+    from sentinel.ids.beacon import STAT_NAMES as BEACON_STATS
+    from sentinel.ids.beacon import BeaconScorer, channel_dispersion
+
+    benign_beacon_flows = flows.loc[benign_train.index].reset_index(drop=True)
+    test_full = flows.loc[~in_train].reset_index(drop=True)
+    benign_ch: pd.DataFrame | None
+    test_ch: pd.DataFrame | None
+    try:
+        benign_ch = channel_dispersion(benign_beacon_flows)
+        test_ch = channel_dispersion(test_full)
+    except (ValueError, KeyError):
+        benign_ch = test_ch = None
+    if benign_ch is not None and test_ch is not None:
+        b_scorer = BeaconScorer().fit(benign_ch[BEACON_STATS].to_numpy(dtype=float))
+        b_threshold = float(
+            np.percentile(b_scorer.score(benign_ch[BEACON_STATS].to_numpy(dtype=float)), 99.0)
+        )
+        b_scores = b_scorer.score(test_ch[BEACON_STATS].to_numpy(dtype=float))
+        labels_full = flows.loc[~in_train, "Label"].astype(str).str.strip().reset_index(drop=True)
+        per_flow_b = pd.DataFrame(
+            {
+                "src": test_full["Src IP"].astype(str),
+                "dst": test_full["Dst IP"].astype(str),
+                "label": labels_full,
+            }
+        )
+        attack_mode = (
+            per_flow_b[per_flow_b["label"].str.upper() != "BENIGN"]
+            .groupby(["src", "dst"])["label"]
+            .agg(lambda x: x.mode().iloc[0])
+        )
+        b_idx = np.flatnonzero(b_scores > b_threshold)
+        for j in b_idx[np.argsort(-b_scores[b_idx])][: args.max_alerts]:
+            row = test_ch.iloc[int(j)]
+            src, dst, pos = str(row["src"]), str(row["dst"]), int(row["last_pos"])
+            true_label = attack_mode.get((src, dst), str(labels_full.iloc[pos]))
+            alerts.append(
+                Alert(
+                    model="beacon",
+                    day=str(test_full[DAY_COLUMN].iloc[pos]),
+                    score=float(b_scores[int(j)]),
+                    predicted_label="beacon-c2",
+                    true_label=str(true_label),
+                    techniques=techniques_for_label("Bot"),  # T1071.001
+                    source_host=src,
+                )
+            )
+
     # Reserve a small held-out queue for the dashboard's "simulate" button:
     # the two attack hosts flagged by the most detectors (the richest threats).
     # Their alerts are real — just withheld from the main feed and revealed on
@@ -239,6 +291,7 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
         "anomaly_alerts": sum(a.model == "autoencoder" for a in alerts),
         "sequence_alerts": sum(a.model == "sequence" for a in alerts),
         "profile_alerts": sum(a.model == "profile" for a in alerts),
+        "beacon_alerts": sum(a.model == "beacon" for a in alerts),
     }
     print(counts)
     return counts

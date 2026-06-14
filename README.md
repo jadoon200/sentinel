@@ -51,7 +51,11 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   attack families** (brute-force, DoS, Bot) on contamination-free held-out
   splits; Bot's blind-2017 baseline ranks *worse than chance* (AUC 0.40) and 50
   labels lift it to AUC 0.997. Cross-network IDS transfer is a few-shot
-  *labelling* problem, not a representation-alignment one.
+  *labelling* problem, not a representation-alignment one. The labelling budget
+  is small and measured (`make eval-label-efficiency`, 5 seeds): **~50 labels
+  reach ≥0.88 recall, ~100 reach ≥0.97**, and *active* (uncertainty) selection
+  underperforms random — a transfer-collapsed model's confidence can't pick
+  informative flows, so random balanced sampling wins.
 - **Conformal alert-budget control (within-network).** A label-free online
   controller re-derives the operating point from the target network's own benign
   traffic, holding the alert rate at a 1% budget through within-network drift

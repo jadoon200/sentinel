@@ -241,7 +241,12 @@ operating points).
   benign traffic. Thresholds calibrated on one period do not transfer cleanly.
 - **Single-testbed dataset:** all IDS results are CIC-IDS2017 only; the
   documented within-dataset inflation means random-split AUCs do not predict
-  cross-network performance.
+  cross-network performance. The 2017→2018 transfer collapses to ~0 recall and
+  is recovered by **few-shot** labelling — and the budget is small: ~50 labelled
+  target flows reach ≥0.88 recall, ~100 reach ≥0.97, across three families
+  (`make eval-label-efficiency`). *Active* (uncertainty) selection underperforms
+  random, because a transfer-collapsed model's confidence is uninformative on the
+  new network — so the deployment recipe is random balanced few-shot, not active.
 - **Imperfect ground truth:** the host-profile detector demonstrably flags
   attack behavior (the Infiltration victim's lateral scanning) that the
   corrected labels still call benign — recall/FPR are bounded by label quality.

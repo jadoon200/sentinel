@@ -75,12 +75,17 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   detector (PortScan 0.998), and a data-size-dispersion beacon detector that
   lifts Bot channel recall from ~0 to 5/5 @1.6% FPR (a foothold — only 5 C2
   channels; mechanism confirmed on 2018 Bot).
-- **SQL injection, where flows can't see it.** SQLi is invisible to every flow
-  detector (12 flows, none in training, indistinguishable from benign HTTP — a
-  feature ceiling, not a tuning gap), so it gets a payload (WAF-style) detector:
+- **SQL injection, by its payload signature.** SQLi is invisible to the
+  *unsupervised* flow detectors (12 flows, none in training, benign-looking on
+  volume/timing) — a calibrated supervised model flags the 12 but only on
+  within-dataset flows. Robust SQLi detection gets a payload (WAF-style) detector:
   char n-grams + logistic regression over request strings, mapped to T1190 and
   validated **cross-corpus** (train one public payload source, test another) at
   F1 **0.984 / 0.998** — generalization, not memorization.
+- **Ensemble coverage, not single-model recall.** No single detector covers the
+  unseen attack families (the best unsupervised model averages 0.268), but the
+  five-detector ensemble covers **7/7 unseen families at recall ≥ 0.93**, each by
+  its specialist (`make eval-ensemble`) — the system catches what no one model can.
 - **Technique mapper, hybrid retrieval.** Zero-shot mapping over the full
   enterprise ATT&CK catalog (697 techniques), benchmarked on 10,411 TRAM
   sentences: BM25 + dense reciprocal-rank fusion with procedure-enriched docs

@@ -220,16 +220,19 @@ small normal flows). Ensemble + campaign-context fusion is the next layer.
 
 ## Application-layer SQLi detection — a different modality (`make sqli`)
 
-SQL injection is invisible to every flow detector, and not for lack of trying:
-CIC-IDS2017 has **12 SQLi flows, none in training**, and they are statistically
-**indistinguishable from benign HTTP** at the flow level (max robust-z of the 12
-vs benign port-80 traffic is **1.0** — they sit inside the benign distribution).
-The malicious signal is the SQL string in the request *payload*, which
-CICFlowMeter's size/timing/count features never capture. This is a genuine
-feature ceiling, not a tuning gap — so SQLi gets a different modality: a
-character n-gram (TF-IDF `char_wb` 1–3) + logistic-regression classifier over
-request payloads, the application-layer / WAF analogue of the flow IDS, mapped
-to T1190. Code: `src/sentinel/ids/sqli.py`.
+CIC-IDS2017 has only **12 SQLi flows, none in training**. On the basic
+volume/timing features they're indistinguishable from benign HTTP (max robust-z
+over duration/bytes/packets ≈ **1.0**), so the **unsupervised** flow detectors —
+autoencoder, sequence, profile — score SQLi **0.0**: reconstruction- and
+prediction-error simply can't represent it. (A *calibrated supervised* model is
+the exception: using the full 70-feature set it flags all 12 SQLi flows at recall
+1.0 / 1.5% FPR — but that rests on 12 within-dataset flows and only says
+"attack-ish," not "SQLi.") What you actually want for SQLi is a detector that
+recognizes the attack **by its signature** and works on real requests — the SQL
+string lives in the request *payload*, which CICFlowMeter never captures. So SQLi
+gets a different modality: a character n-gram (TF-IDF `char_wb` 1–3) +
+logistic-regression classifier over request payloads, the application-layer / WAF
+analogue of the flow IDS, mapped to T1190. Code: `src/sentinel/ids/sqli.py`.
 
 Validated the SENTINEL way — **cross-corpus** (train one public payload source,
 test a different one), so the number reflects generalization, not memorization:
@@ -243,10 +246,40 @@ test a different one), so the number reflects generalization, not memorization:
 Char n-grams carry the generalization: they key on SQL syntax (quotes, comment
 markers, `union select`, `or 1=1`) that survives across payload styles, where
 word tokens would overfit one corpus's vocabulary. Corpora are free and public
-(Morzeux HttpParamsDataset; Kaggle SQLiV2), cached under `data/sqli/`. Honest
-scope: this inspects payloads, not netflow — it complements the flow ensemble
-rather than fixing it, and needs an HTTP-request feed to raise live in-platform
-alerts (the flow replay has no payloads to score).
+(Morzeux HttpParamsDataset; Kaggle SQLiV2), cached under `data/sqli/`. Why this
+beats the calibrated-supervised flow result despite the same headline recall: it
+recognizes SQLi *specifically* (not "anomalous flow"), generalizes across
+independent corpora (so it isn't memorizing 12 testbed flows or relying on a
+within-dataset threshold), and runs on the actual HTTP request — a deployable WAF
+signal. Honest scope: it inspects payloads, not netflow — it complements the flow
+ensemble rather than fixing it, and needs an HTTP-request feed to raise live
+in-platform alerts (the flow replay has no payloads to score).
+
+## Ensemble coverage — the unit you actually deploy (`make eval-ensemble`)
+
+Judging the platform on any single model's overall recall is the wrong unit — the
+autoencoder's **0.268 overall** is modest because it is unsupervised on *unseen*
+families, but you deploy the **five-detector ensemble**, not the autoencoder
+alone. Run on the same temporal split (train Mon–Wed, test the unseen Thu–Fri
+families) at ~1% benign FPR, each family is carried by its specialist:
+
+| Unseen family | Best detector | Recall | (no single model covers all) |
+|---|---|---|---|
+| DDoS | supervised (calibrated) | 1.000 | autoencoder 0.70, sequence 0.64 |
+| Infiltration | supervised | 0.938 | autoencoder 0.84 |
+| PortScan | profile / beacon | 1.000 | supervised 0.51, autoencoder 0.01 |
+| Bot | beacon | 1.000 | supervised 0.00, autoencoder 0.06 |
+| Web Brute Force | sequence / supervised | 1.000 | autoencoder 0.48 |
+| Web XSS | sequence / supervised | 1.000 | autoencoder 0.67 |
+| Web SQL Injection | supervised¹ | 1.000 | unsupervised 0.00; payload detector 0.98 cross-corpus |
+
+**7/7 unseen families covered at recall ≥ 0.93 by their specialist**, where the
+strongest single unsupervised model (the autoencoder) averages 0.268. That is the
+honest case for the ensemble: the models are complementary by construction, and
+the system catches what no one detector can. The combined alert rate is higher
+than any single detector's (union of five ~1% operating points) — the standard
+ensemble trade. ¹SQLi-via-supervised rests on 12 within-dataset flows; the payload
+detector is the robust, SQLi-specific answer (above).
 
 # Technique mapper evaluation
 

@@ -102,13 +102,14 @@ export function ReportCard() {
       </section>
 
       <section className="panel">
-        <h2>SQL injection — the gap flow data can't see</h2>
+        <h2>SQL injection — recognized by its payload signature</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          CIC-IDS2017 has 12 SQLi flows, none in training, and they're statistically identical to
-          benign HTTP at the flow level — the attack lives in the request <i>payload</i>, which
-          netflow features never capture, so every flow detector scores it <b>0</b>. SQLi gets a
-          different modality: a payload (WAF-style) detector — character n-grams + logistic
-          regression over HTTP request strings, mapped to T1190.
+          CIC-IDS2017 has 12 SQLi flows, none in training; the <i>unsupervised</i> flow detectors
+          miss them entirely (benign-looking on volume/timing), and a calibrated supervised model
+          only flags the 12 within-dataset flows as "attack-ish." Robust, SQLi-<i>specific</i>
+          detection needs the request <i>payload</i> — a different modality: a payload (WAF-style)
+          detector, character n-grams + logistic regression over HTTP request strings, mapped to
+          T1190.
         </p>
         <p className="muted" style={{ marginTop: 0, marginBottom: 8 }}>
           F1, validated <b>cross-corpus</b> — train on one public payload source, test on another —

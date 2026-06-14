@@ -146,10 +146,12 @@ evaluation record; this card summarizes, it does not introduce new results.
 
 ### 7. Application-layer SQLi detector — payload inspection (different modality)
 
-- **Task:** detect SQL injection, which is invisible to every flow detector —
-  CIC-IDS2017 has 12 SQLi flows, none in training, statistically identical to
-  benign HTTP (max robust-z 1.0). The signal is the SQL string in the request
-  payload, not the netflow.
+- **Task:** detect SQL injection by its payload signature. CIC-IDS2017 has 12
+  SQLi flows, none in training; the *unsupervised* flow detectors miss them
+  entirely (volume/timing look benign), and while a calibrated supervised model
+  flags all 12 from the full feature set (recall 1.0 / 1.5% FPR), that rests on 12
+  within-dataset flows and only signals "attack-ish." Robust, SQLi-*specific*
+  detection needs the request payload — the SQL string — which netflow omits.
 - **Architecture:** character n-gram TF-IDF (`char_wb`, 1–3) + logistic
   regression over request payloads — the application-layer / WAF analogue of the
   flow IDS. Maps to T1190. Code: `src/sentinel/ids/sqli.py` (`make sqli`).
@@ -212,6 +214,14 @@ evaluation record; this card summarizes, it does not introduce new results.
 | Beacon (dispersion) | temporal, channel level | Bot 1.000 (5/5) @1.6% FPR, AUC 0.995 | only 5 C2 channels — foothold, not robust |
 | SQLi (payload) | cross-corpus, 2 public sources | F1 0.984 / 0.998 cross-corpus | payload modality, not netflow — needs HTTP feed to alert |
 
+**Ensemble coverage (the unit you deploy):** on the temporal split at ~1% FPR,
+the five flow detectors together cover **7/7 unseen Thu–Fri families at recall
+≥ 0.93**, each by its specialist (Bot→beacon, PortScan→profile, web→sequence,
+DDoS/Infiltration→supervised) — even though the best single unsupervised model
+(autoencoder) averages 0.268. No model covers them all; the ensemble does
+(`make eval-ensemble`). The trade is a higher combined alert rate (union of five
+operating points).
+
 ## Known limitations & failure modes
 
 - **Bot/beacon recall** was ≈ 0 for all three periodicity detectors (benign NTP
@@ -219,10 +229,13 @@ evaluation record; this card summarizes, it does not introduce new results.
   detector (model 6) lifts Bot channel recall to 1.000 (5/5) @1.6% FPR — but on
   only five 2017 C2 channels, so treat it as a strong foothold, not a closed gap,
   pending validation on a dataset with more beacon channels and retained IPs.
-- **SQL Injection is undetectable at the flow level** (recall 0 for every flow
-  detector) — 12 flows, none in training, indistinguishable from benign HTTP. It
-  is instead handled by the application-layer payload detector (model 7, F1 0.98+
-  cross-corpus), a different modality; the flow ceiling stands by design.
+- **SQL Injection is invisible to the unsupervised flow detectors** (autoencoder/
+  sequence/profile recall 0 — only 12 flows, none in training, benign-looking on
+  volume/timing features). A calibrated supervised model does flag all 12 from the
+  full feature set (recall 1.0 / 1.5% FPR), but on 12 within-dataset flows that's
+  fragile and only "attack-ish," not SQLi-specific. Robust SQLi detection is the
+  application-layer payload detector (model 7, F1 0.98+ cross-corpus), a different
+  modality that recognizes the attack by signature and generalizes across corpora.
 - **FPR drift under distribution shift:** the autoencoder's observed 6.3% FPR
   exceeds the calibrated 1% because Thu–Fri benign traffic differs from Mon–Wed
   benign traffic. Thresholds calibrated on one period do not transfer cleanly.

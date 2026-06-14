@@ -1,12 +1,15 @@
 """Application-layer SQL-injection detector — payload inspection, not netflow.
 
-CIC-IDS2017 has only 12 SQLi flows, none in training, and they are statistically
-indistinguishable from benign HTTP at the flow level (max robust-z 1.0): the
-malicious signal is the SQL string in the request payload, which CICFlowMeter
-never captures (see docs/EVAL.md). SQLi therefore needs a different modality — a
-character n-gram classifier over request payloads, the application-layer / WAF
-analogue of the flow IDS. Detections map to T1190 (Exploit Public-Facing App),
-so they share the same ATT&CK graph as every other SENTINEL signal.
+CIC-IDS2017 has only 12 SQLi flows, none in training. On basic volume/timing
+features they look like benign HTTP, so the unsupervised flow detectors miss them
+entirely (autoencoder/sequence/profile recall 0); a calibrated supervised model
+does flag the 12 from the full feature set, but on 12 within-dataset flows and
+only as "attack-ish," not "SQLi" (see docs/EVAL.md). What SQLi actually needs is
+a detector that recognizes the attack by its signature — the SQL string in the
+request payload, which CICFlowMeter never captures — and works on real requests.
+So this is a different modality: a character n-gram classifier over request
+payloads, the application-layer / WAF analogue of the flow IDS. Detections map to
+T1190 (Exploit Public-Facing App), sharing the ATT&CK graph with every signal.
 
 Validated the SENTINEL way — **cross-corpus**: train on one public payload corpus
 and test on a different one, to prove the detector generalizes beyond a single

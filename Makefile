@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli api ui briefing refresh eval-cross eval-domain eval-cross-family migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -80,6 +80,10 @@ eval-cross-family:
 # Domain-adaptation study: can we beat the 2017->2018 transfer failure?
 eval-domain:
 	python scripts/eval_domain_adapt.py
+
+# Ensemble coverage: per-family best detector + recall across the five detectors
+eval-ensemble:
+	python scripts/eval_ensemble.py
 
 # Cross-dataset generalization: train 2017, test 2018 (downloads a 2018 day)
 eval-cross:

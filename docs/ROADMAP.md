@@ -44,8 +44,13 @@ Research extensions that exceeded the original plan, all recorded in
   roll up into per-host threats joined to CTI campaigns, with detector
   agreement, unioned ATT&CK techniques, and a transparent risk score scaled by
   the best campaign's fusion strength.
-- **Spectral beacon study** — Schuster-periodogram C2 detector, kept as a
-  characterized negative.
+- **Beacon detection — periodicity negative → dispersion fix.** Three
+  periodicity attempts (variance pairs, Schuster periodogram) only *ranked* Bot
+  (AUC ≤0.83, recall ≤0.056) — benign timers out-periodic the beacon. Re-framing
+  to per-channel **data-size dispersion** (`ids/beacon.py`) lifts Bot channel
+  recall to 5/5 @~1.6% FPR (AUC 0.995): an ARES C2 channel mixes empty polls and
+  data tasking, so its byte-size CV is extreme. Foothold (only 5 C2 channels);
+  mechanism confirmed on 2018 Bot.
 - **Hybrid BM25 + dense technique mapper** — reciprocal-rank fusion with
   procedure-enriched docs, beating the cross-encoder rerank at bi-encoder cost.
 - **Temporal analytics** — trending techniques, feed drift (PSI, additively

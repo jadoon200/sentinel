@@ -34,4 +34,7 @@ python -m sentinel.ingest.flows enrich
 log "replay: flows -> intel-fused alerts"
 python -m sentinel.ids.replay
 
+log "waf-replay: HTTP requests -> T1190 SQLi alerts (coexist with flow alerts)"
+python -m sentinel.ids.waf_replay
+
 log "refresh complete"

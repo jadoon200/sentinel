@@ -252,8 +252,13 @@ recognizes SQLi *specifically* (not "anomalous flow"), generalizes across
 independent corpora (so it isn't memorizing 12 testbed flows or relying on a
 within-dataset threshold), and runs on the actual HTTP request — a deployable WAF
 signal. Honest scope: it inspects payloads, not netflow — it complements the flow
-ensemble rather than fixing it, and needs an HTTP-request feed to raise live
-in-platform alerts (the flow replay has no payloads to score).
+ensemble rather than fixing it. It is wired into the platform via a **WAF replay**
+(`make waf-replay`, `ids/waf_replay.py`): the detector scores an HTTP-request
+stream and persists flagged requests as `model="sqli"` Alerts tagged T1190, which
+fuse with T1190 campaigns and surface in the host rollup like any flow detection.
+Like the flow replay over the CIC *testbed*, this is a replay over a labelled
+corpus (the public payload sets carry no client IPs, so requests are attributed
+to synthetic RFC 5737 documentation IPs — clearly not real attribution).
 
 ## Ensemble coverage — the unit you actually deploy (`make eval-ensemble`)
 

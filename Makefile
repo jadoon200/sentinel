@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -68,6 +68,10 @@ ids-beacon:
 # Application-layer SQLi detector (payload char n-grams), cross-corpus eval
 sqli:
 	python -m sentinel.ids.sqli
+
+# WAF replay: score HTTP requests through the SQLi detector into T1190 alerts
+waf-replay:
+	python -m sentinel.ids.waf_replay
 
 # Replay Thu-Fri flows through both models into ATT&CK-tagged alerts (needs make up)
 replay:

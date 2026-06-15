@@ -129,7 +129,7 @@ evaluation record; this card summarizes, it does not introduce new results.
   an ARES C2 channel mixes empty polls and data tasking, so its forward-byte CV
   is extreme while a benign timer's is ~0.
 
-### 6. Beacon detector — channel data-size dispersion (the C2 fix)
+### 6. Beacon detector — channel data-size dispersion (CIC Bot fix; ARES-specific)
 
 - **Task:** detect C2 beacon channels the periodicity detectors could only rank.
 - **Architecture:** per (src→dst) channel, coefficient of variation of forward
@@ -139,10 +139,14 @@ evaluation record; this card summarizes, it does not introduce new results.
 - **Key numbers (CIC-IDS2017, temporal split, channel level):** Bot recall
   **1.000 (5/5)** at ~1.6% FPR, ROC-AUC **0.995** — vs 0.000–0.056 for all three
   periodicity attempts.
-- **Honest caveat:** only **five** 2017 C2 channels exist, so this is a strong
-  foothold, not a robustly-closed gap. The mechanism is confirmed on
-  CSE-CIC-IDS2018 Bot (286k flows, ≈50% empty polls + ≈50% data flows); 2018's
-  public CSVs drop IPs so the channel statistic can't be recomputed there.
+- **Does NOT generalize (the honest negative).** Only five 2017 C2 channels exist
+  (one ARES server), so it was cross-validated on **CTU-13** (7 botnet families,
+  1,470 botnet channels with real IPs, `make eval-beacon-ctu13`): recall
+  **0.010 (15/1,470)** — chance, AUCs inverted. ARES is bimodal (empty polls +
+  tasking → high dispersion); Rbot/Neris/Virut beacon with **uniform** sizes (low
+  dispersion), so dispersion can't see them. It is an **ARES-specific** signature,
+  not a general beacon detector — it stays a CIC ensemble member (it catches the
+  CIC Bot the platform demos on) but the capability is characterized, not broad.
 
 ### 7. Application-layer SQLi detector — payload inspection (different modality)
 
@@ -213,7 +217,7 @@ evaluation record; this card summarizes, it does not introduce new results.
 | Autoencoder | temporal, unseen families | Infiltration 0.844 / DDoS 0.705 | overall 0.268 recall @6.3% FPR |
 | Sequence model | temporal, per-host windows | XSS 1.000 / Brute Force ~0.96 | scan/beacon 0.000 (inverted) |
 | Host-profile | temporal, fan-out stats | PortScan 0.998 @1.15% FPR | Bot 0.000 deployed (0.056 per-pair) |
-| Beacon (dispersion) | temporal, channel level | Bot 1.000 (5/5) @1.6% FPR, AUC 0.995 | only 5 C2 channels — foothold, not robust |
+| Beacon (dispersion) | CIC-IDS2017 (ARES) | Bot 1.000 (5/5) @1.6% FPR, AUC 0.995 | ARES-specific — CTU-13: 0.010 (15/1,470), does not generalize |
 | SQLi (payload) | cross-corpus, 2 public sources | F1 0.984 / 0.998 cross-corpus | payload modality, not netflow; alerts via WAF replay over a labelled corpus |
 
 **Ensemble coverage (the unit you deploy):** on the temporal split at ~1% FPR,
@@ -228,9 +232,11 @@ operating points).
 
 - **Bot/beacon recall** was ≈ 0 for all three periodicity detectors (benign NTP
   timers are more periodic than a jittered beacon). The data-size **dispersion**
-  detector (model 6) lifts Bot channel recall to 1.000 (5/5) @1.6% FPR — but on
-  only five 2017 C2 channels, so treat it as a strong foothold, not a closed gap,
-  pending validation on a dataset with more beacon channels and retained IPs.
+  detector (model 6) lifts CIC Bot channel recall to 1.000 (5/5) @1.6% FPR, but
+  **does not generalize** — on CTU-13's 7 botnet families (1,470 channels) it
+  scores 0.010, because that signature is ARES-specific (bimodal poll+tasking).
+  Bot/beacon detection in general remains open; the win is CIC-specific and the
+  limitation is now measured, not assumed.
 - **SQL Injection is invisible to the unsupervised flow detectors** (autoencoder/
   sequence/profile recall 0 — only 12 flows, none in training, benign-looking on
   volume/timing features). A calibrated supervised model does flag all 12 from the

@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon eval-beacon-ctu13 sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -64,6 +64,10 @@ ids-spectral:
 # Beacon detector by data-size dispersion — the C2 signature periodicity missed
 ids-beacon:
 	python -m sentinel.ids.beacon
+
+# Validate the beacon-dispersion detector on CTU-13 (many botnet families/channels)
+eval-beacon-ctu13:
+	python scripts/eval_beacon_ctu13.py
 
 # Application-layer SQLi detector (payload char n-grams), cross-corpus eval
 sqli:

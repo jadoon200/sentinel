@@ -181,9 +181,10 @@ frame in this dataset** — perfect periodicity is benign infrastructure. The
 spectral detector ships behind `make ids-spectral` for the documented C2-channel
 ranking, kept as a characterized negative.
 
-### Beacon by data-size dispersion — the signature periodicity missed (the fix)
+### Beacon by data-size dispersion — closes the CIC Bot gap, but ARES-specific
 
-Re-framing closed the gap. An ARES C2 channel interleaves payload-less poll
+Re-framing closed the *CIC-IDS2017* gap (it does not generalize — see below). An
+ARES C2 channel interleaves payload-less poll
 flows ("Bot - Attempted" — 67% of 2017 Bot flows) with data-carrying tasking
 flows, so a single (src→dst) channel's forward-payload **sizes are wildly
 dispersed**; a benign periodic service (NTP) sends a uniform packet every time,
@@ -198,16 +199,36 @@ beacon ranking signal into operating-point recall. Reproduce: `make ids-beacon`.
 | **data-size dispersion (`ids/beacon.py`)** | **1.000 (5/5)** | **0.995** |
 
 The dispersion statistics are behavioral (size CV), never an IP/port/timestamp,
-so the no-topology-leak rule holds. **Honest caveat:** validated at the channel
-level on only the *five* 2017 C2 channels (all five hosts → 205.174.165.73), so
-this is a strong foothold, not a robustly-closed gap. The driving mechanism is
-confirmed cross-network on CSE-CIC-IDS2018 Bot (286k flows: **50.3% empty polls
-≤1 byte + 49.7% data flows >100 bytes** — the bimodality that produces high
-per-channel size variance); 2018's public CSVs drop IPs, so the channel
-statistic itself cannot be recomputed there. Takeaway: the earlier "needs
-payload-size entropy we don't have" conclusion was half-right — size *entropy*
-(content) is unavailable, but size *dispersion* (statistics) was in the features
-all along, and it is the discriminator periodicity could not see.
+so the no-topology-leak rule holds. The 2018 Bot capture (286k flows) confirms the
+*mechanism* is not a 2017 fluke: **50.3% empty polls ≤1 byte + 49.7% data flows
+>100 bytes** — exactly the bimodality that produces high per-channel variance.
+
+#### …but it does not generalize beyond ARES (CTU-13, the honest negative)
+
+The caveat at the time was n=5 (all five 2017 C2 channels go to one ARES server),
+so the detector was cross-validated on **CTU-13** (Stratosphere): 13 captures,
+**seven botnet families, 1,470 botnet channels with real IPs** — the dataset the
+foothold needed. Same detector, per-scenario benign calibration (`make
+eval-beacon-ctu13`). It **fails to generalize**:
+
+| | recall @~1% FPR | note |
+|---|---|---|
+| CIC-IDS2017 (ARES) | 1.000 (5/5) | the bimodal poll+tasking signature |
+| **CTU-13 (7 families, 1,470 ch.)** | **0.010 (15/1,470)** | chance; most family AUCs **< 0.5** |
+
+Only Rbot scenarios 10–11 show signal (0.71/1.00); every other family is ~0, and
+robust to using `SrcBytes` (forward analog) instead of `TotBytes`. The AUCs are
+*inverted* (botnet channels are **more uniform** than diverse benign traffic) —
+which explains it: ARES is bimodal (high dispersion), but Rbot/Neris/Virut beacon
+with **uniform** payload sizes (low dispersion). Data-size dispersion is one
+specific C2 signature, **not a universal beacon detector**. (The irony: the
+regular-cadence botnets dispersion misses are the ones the abandoned *periodicity*
+detector might catch — no single statistic covers all botnets.)
+
+**Honest status:** the beacon detector genuinely closed the CIC-IDS2017 Bot gap
+and stays a CIC ensemble member, but it is **ARES-specific** — a characterized
+result on one botnet, not a general capability. Validation turned a "foothold"
+into a documented limitation, which is the point of running it.
 
 The two models are complementary by construction: the supervised model is
 near-perfect on attack families it has seen (random-split table above), the

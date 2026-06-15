@@ -132,7 +132,8 @@ export function ReportCard() {
         ))}
         <p className="muted" style={{ marginBottom: 0 }}>
           Honest scope: this inspects payloads, not flows — it complements the flow ensemble rather
-          than fixing it, and needs an HTTP-request feed to raise live alerts in-platform.
+          than fixing it. It's wired in via a WAF replay: scored requests become T1190 alerts that
+          fuse with campaigns and appear in the threat feed, like any flow detection.
         </p>
       </section>
 

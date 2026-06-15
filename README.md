@@ -85,7 +85,9 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   within-dataset flows. Robust SQLi detection gets a payload (WAF-style) detector:
   char n-grams + logistic regression over request strings, mapped to T1190 and
   validated **cross-corpus** (train one public payload source, test another) at
-  F1 **0.984 / 0.998** — generalization, not memorization.
+  F1 **0.984 / 0.998** — generalization, not memorization. Wired into the platform
+  via a WAF replay (`make waf-replay`) → T1190 alerts that fuse with campaigns and
+  show in the threat feed.
 - **Ensemble coverage, not single-model recall.** No single detector covers the
   unseen attack families (the best unsupervised model averages 0.268), but the
   five-detector ensemble covers **7/7 unseen families at recall ≥ 0.93**, each by

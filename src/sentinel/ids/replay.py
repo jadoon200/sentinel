@@ -281,8 +281,10 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
             a.simulated = True
 
     with session_scope() as session:
-        # Alerts are a derived artifact of one replay pass — rebuild wholesale.
-        session.execute(delete(Alert))
+        # Flow alerts are a derived artifact of one replay pass — rebuild them,
+        # but leave the WAF replay's application-layer `sqli` alerts intact so the
+        # two replays coexist in the alerts table.
+        session.execute(delete(Alert).where(Alert.model != "sqli"))
         for alert in alerts:
             session.add(alert)
 

@@ -8,7 +8,12 @@ const DETECTOR_LABEL: Record<string, string> = {
   sequence: "sequence",
   profile: "profile",
   beacon: "beacon (C2)",
+  sqli: "SQLi (WAF)",
 };
+
+// The five flow detectors; SQLi is a separate application-layer modality.
+const FLOW_DETECTORS = 5;
+const flowDetectors = (t: HostThreat) => t.detectors.filter((d) => d !== "sqli");
 
 function riskClass(r: number) {
   return r >= 85 ? "risk-crit" : r >= 70 ? "risk-high" : "risk-med";
@@ -19,7 +24,15 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 function story(t: HostThreat): string {
   const labels = t.true_labels.filter((l) => l.toUpperCase() !== "BENIGN");
   const what = labels.length ? labels.join(", ").toLowerCase() : "anomalous activity";
-  const base = `${what} — flagged by ${t.detectors.length} of 5 detectors`;
+  const flows = flowDetectors(t);
+  const hasSqli = t.detectors.includes("sqli");
+  let base: string;
+  if (flows.length === 0 && hasSqli) {
+    base = "SQL injection attempts — application-layer (WAF)";
+  } else {
+    base = `${what} — flagged by ${flows.length} of ${FLOW_DETECTORS} detectors`;
+    if (hasSqli) base += " + WAF";
+  }
   if (t.fused.length > 0) {
     // Tie the badge into the sentence: which campaign, how strong, expand to see
     // which specific detection drove it.
@@ -70,10 +83,11 @@ function DetectionLine({ alert }: { alert: AlertRef }) {
 }
 
 function EvidenceChain({ t }: { t: HostThreat }) {
+  const flows = flowDetectors(t).length;
   return (
     <div className="chain">
       <div className="stage">
-        <h4>{t.detectors.length} of 5 detectors agree</h4>
+        <h4>{flows > 0 ? `${flows} of ${FLOW_DETECTORS} detectors agree` : "application-layer (WAF)"}</h4>
         {t.alerts.map((a) => (
           <DetectionLine key={a.alert_id} alert={a} />
         ))}

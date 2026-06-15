@@ -162,8 +162,10 @@ evaluation record; this card summarizes, it does not introduce new results.
   (recall 0.969 / 0.997, precision ~1.0). It generalizes across sources, not just
   within one.
 - **Honest scope:** a different *modality* — it inspects payloads, not flows, so
-  it complements the flow ensemble rather than fixing it, and needs an
-  HTTP-request feed to raise live in-platform alerts (the flow replay has none).
+  it complements the flow ensemble rather than fixing it. Wired in via a WAF
+  replay (`make waf-replay`): scored requests become T1190 `sqli` alerts that
+  fuse with campaigns and show in the dashboard. Like the flow replay it runs
+  over a labelled corpus (client IPs are synthetic RFC 5737 — not real capture).
 
 ## Fusion scoring layer (correlation ranking — not a trained model)
 
@@ -212,7 +214,7 @@ evaluation record; this card summarizes, it does not introduce new results.
 | Sequence model | temporal, per-host windows | XSS 1.000 / Brute Force ~0.96 | scan/beacon 0.000 (inverted) |
 | Host-profile | temporal, fan-out stats | PortScan 0.998 @1.15% FPR | Bot 0.000 deployed (0.056 per-pair) |
 | Beacon (dispersion) | temporal, channel level | Bot 1.000 (5/5) @1.6% FPR, AUC 0.995 | only 5 C2 channels — foothold, not robust |
-| SQLi (payload) | cross-corpus, 2 public sources | F1 0.984 / 0.998 cross-corpus | payload modality, not netflow — needs HTTP feed to alert |
+| SQLi (payload) | cross-corpus, 2 public sources | F1 0.984 / 0.998 cross-corpus | payload modality, not netflow; alerts via WAF replay over a labelled corpus |
 
 **Ensemble coverage (the unit you deploy):** on the temporal split at ~1% FPR,
 the five flow detectors together cover **7/7 unseen Thu–Fri families at recall

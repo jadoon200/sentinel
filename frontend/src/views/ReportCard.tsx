@@ -100,10 +100,11 @@ export function ReportCard() {
           </div>
         ))}
         <p className="muted" style={{ marginBottom: 0 }}>
-          *Beacon: data-size dispersion beats periodicity on C2, but validated on only 5 C2 channels
-          — a foothold (mechanism confirmed on 2018 Bot). Technique mapper: zero-shot over 697 ATT&CK
-          techniques, parent hit@5 0.690 on 10,411 TRAM sentences. Autoencoder backend: MLX, 3.3×
-          faster than torch at recall parity (10 seeds).
+          *Beacon: catches the CIC Bot (5/5) but is <b>ARES-specific</b> — cross-validation on
+          CTU-13 (7 botnet families, 1,470 channels) gives 0.010, so it does <i>not</i> generalize
+          (a measured limitation). Technique mapper: zero-shot over 697 ATT&CK techniques, parent
+          hit@5 0.690 on 10,411 TRAM sentences. Autoencoder backend: MLX, 3.3× faster than torch at
+          recall parity (10 seeds).
         </p>
       </section>
 

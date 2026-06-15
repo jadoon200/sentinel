@@ -56,13 +56,14 @@ Research extensions that exceeded the original plan, all recorded in
   cross-corpus at F1 0.984/0.998 on two free public payload sources. Wired into
   the platform via a WAF replay (`make waf-replay`) → T1190 alerts that fuse with
   campaigns and surface in the dashboard.
-- **Beacon detection — periodicity negative → dispersion fix.** Three
-  periodicity attempts (variance pairs, Schuster periodogram) only *ranked* Bot
-  (AUC ≤0.83, recall ≤0.056) — benign timers out-periodic the beacon. Re-framing
-  to per-channel **data-size dispersion** (`ids/beacon.py`) lifts Bot channel
-  recall to 5/5 @~1.6% FPR (AUC 0.995): an ARES C2 channel mixes empty polls and
-  data tasking, so its byte-size CV is extreme. Foothold (only 5 C2 channels);
-  mechanism confirmed on 2018 Bot.
+- **Beacon detection — periodicity negative → dispersion fix (CIC) → CTU-13
+  negative.** Three periodicity attempts only *ranked* Bot (AUC ≤0.83, recall
+  ≤0.056). Re-framing to per-channel **data-size dispersion** (`ids/beacon.py`)
+  lifts CIC Bot recall to 5/5 @~1.6% FPR (AUC 0.995) — ARES mixes empty polls and
+  data tasking, so its byte-size CV is extreme. But cross-validation on **CTU-13**
+  (7 botnet families, 1,470 channels, `make eval-beacon-ctu13`) shows it **does
+  not generalize** (0.010): the signature is ARES-specific (other botnets beacon
+  with uniform sizes). A characterized win on CIC, with a measured limitation.
 - **Hybrid BM25 + dense technique mapper** — reciprocal-rank fusion with
   procedure-enriched docs, beating the cross-encoder rerank at bi-encoder cost.
 - **Temporal analytics** — trending techniques, feed drift (PSI, additively

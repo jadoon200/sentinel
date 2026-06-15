@@ -77,8 +77,9 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   benign-only autoencoder (Infiltration 0.84 / DDoS 0.71 / XSS 0.67), per-host
   sequence model (XSS 1.00 / Web Brute Force 0.94), host-profile fan-out
   detector (PortScan 0.998), and a data-size-dispersion beacon detector that
-  lifts Bot channel recall from ~0 to 5/5 @1.6% FPR (a foothold — only 5 C2
-  channels; mechanism confirmed on 2018 Bot).
+  lifts CIC Bot channel recall from ~0 to 5/5 @1.6% FPR. Cross-validated on
+  CTU-13 (7 botnet families, 1,470 channels) it **does not generalize** (0.010 —
+  the signature is ARES-specific): a measured limitation, not an assumed one.
 - **SQL injection, by its payload signature.** SQLi is invisible to the
   *unsupervised* flow detectors (12 flows, none in training, benign-looking on
   volume/timing) — a calibrated supervised model flags the 12 but only on

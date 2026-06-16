@@ -27,7 +27,7 @@ code { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; color: 
 .masthead h1 { font-size: 23px; letter-spacing: 0.26em; margin: 0; font-weight: 600; color: var(--text); padding-left: 0.26em; }
 .tagline { color: var(--muted); font-size: 13.5px; margin: 9px 0 0; }
 
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.tabs { display: flex; justify-content: center; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
 .tabs button {
   background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted);
   padding: 10px 18px 12px; cursor: pointer; text-align: left; line-height: 1.3;

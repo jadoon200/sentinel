@@ -21,9 +21,11 @@ body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
 code { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; color: var(--accent); }
 
 .shell { max-width: 940px; margin: 0 auto; padding: 28px 32px 80px; }
-.masthead { display: flex; align-items: baseline; gap: 14px; padding-bottom: 20px; }
-.masthead h1 { font-size: 21px; letter-spacing: 0.22em; margin: 0; font-weight: 600; color: var(--text); }
-.masthead span { color: var(--muted); font-size: 13px; }
+.masthead { text-align: center; padding: 10px 0 22px; }
+.brand { display: inline-flex; align-items: center; gap: 11px; }
+.brand-mark { color: var(--accent); }
+.masthead h1 { font-size: 23px; letter-spacing: 0.26em; margin: 0; font-weight: 600; color: var(--text); padding-left: 0.26em; }
+.tagline { color: var(--muted); font-size: 13.5px; margin: 9px 0 0; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
 .tabs button {
@@ -34,7 +36,9 @@ code { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; color: 
 .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 .tabs button:hover { color: var(--text); }
 
-.feed-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.feed-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.feed-note { color: var(--hint); font-size: 12.5px; line-height: 1.55; margin: 0 0 16px; max-width: 760px; }
+.feed-note b { color: var(--muted); font-weight: 500; }
 .muted { color: var(--muted); font-size: 13px; }
 .hint { color: var(--hint); font-size: 12px; }
 .error { color: var(--bad); padding: 14px; }

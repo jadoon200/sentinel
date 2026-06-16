@@ -202,13 +202,28 @@ export function ThreatFeed() {
           <span style={{ color: "var(--warn)" }}>amber = scored intel match</span>
         </span>
         <button
+          title={
+            "Replays one of two detections held back from this capture — mimics a live alert " +
+            "arriving and fusing with intel. The data is the static CIC-IDS2017 dataset; nothing is live."
+          }
           onClick={() => queue.length && setRevealed([{ ...queue[0] }, ...revealed])}
           disabled={queue.length === 0}
         >
           <i className="ti ti-player-play" aria-hidden="true" />
-          &nbsp;Simulate detection {queue.length > 0 ? `(${queue.length})` : ""}
+          &nbsp;Simulate live alert {queue.length > 0 ? `(${queue.length})` : ""}
         </button>
       </div>
+      <p className="feed-note">
+        Replaying the <b>CIC-IDS2017</b> capture (a research dataset — not live traffic).{" "}
+        {queue.length > 0 ? (
+          <>
+            <b>Simulate live alert</b> reveals a detection held back from the feed, mimicking a new
+            alert arriving and fusing with intel.
+          </>
+        ) : (
+          <>All held-back detections have been revealed.</>
+        )}
+      </p>
       {all.map((t) => (
         <ThreatRow key={t.host} t={t} />
       ))}

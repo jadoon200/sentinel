@@ -179,3 +179,12 @@ The dashboard is a question-led three-tab storyline over those endpoints:
   paste any CTI paragraph and the live zero-shot mapper ranks the closest ATT&CK
   techniques (`POST /map-techniques`). It inspects only the pasted text — it does
   not fetch or scan a URL — so the API stays effectively read-only.
+
+### Deploying the API publicly
+
+The inference route runs a model, so the API ships with graceful-degradation
+guards — configurable CORS origins, a request-size cap, per-client rate limiting,
+and a bounded-concurrency cap that sheds load as `503` rather than exhausting
+memory — all local-safe by default and tuned via `SENTINEL_API_*` env vars. See
+[docs/DEPLOY.md](docs/DEPLOY.md) for the env vars and the reverse-proxy / TLS /
+sizing steps to do at deploy time.

@@ -211,3 +211,53 @@ def test_map_techniques_runs_mapper_over_pasted_text(
 def test_map_techniques_empty_text_returns_empty(client: TestClient) -> None:
     # No sentence clears the word floor — returns early, never touching the model.
     assert client.post("/map-techniques", json={"text": ""}).json() == []
+
+
+def test_map_techniques_rejects_oversized_text(client: TestClient) -> None:
+    from sentinel.api import app as api_app
+
+    oversized = "a " * (api_app._MAX_REQUEST_CHARS + 10)
+    assert client.post("/map-techniques", json={"text": oversized}).status_code == 422
+
+
+def test_map_techniques_rate_limited(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from sentinel.api import app as api_app
+    from sentinel.api.limits import RateLimiter
+    from sentinel.nlp.mapper import TechniqueMatch
+
+    class FakeMapper:
+        def map_text(self, text: str, top_k: int = 5) -> list[TechniqueMatch]:
+            return [TechniqueMatch("T1190", "Exploit Public-Facing App", 0.71)]
+
+    monkeypatch.setattr(api_app, "_get_mapper", lambda session: FakeMapper())
+    monkeypatch.setattr(api_app, "_rate_limiter", RateLimiter(max_requests=1, window_seconds=60))
+
+    text = "An attacker exploited the public VPN portal to gain initial access."
+    assert client.post("/map-techniques", json={"text": text}).status_code == 200
+    assert client.post("/map-techniques", json={"text": text}).status_code == 429
+
+
+def test_map_techniques_sheds_load_when_mapper_saturated(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from threading import Semaphore
+
+    from sentinel.api import app as api_app
+
+    saturated = Semaphore(1)
+    saturated.acquire()  # no slots free — the next acquire must time out
+    monkeypatch.setattr(api_app, "_inference_sem", saturated)
+    monkeypatch.setattr(api_app, "_INFERENCE_TIMEOUT", 0.01)
+
+    text = "An attacker exploited the public VPN portal to gain initial access."
+    assert client.post("/map-techniques", json={"text": text}).status_code == 503
+
+
+def test_body_size_limit_rejects_large_payloads(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sentinel.api import app as api_app
+
+    monkeypatch.setattr(api_app, "_MAX_BODY_BYTES", 5)  # any real body exceeds this
+    resp = client.post("/map-techniques", json={"text": "hello world"})
+    assert resp.status_code == 413

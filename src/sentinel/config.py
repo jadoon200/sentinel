@@ -95,6 +95,27 @@ class Settings(BaseSettings):
 
     http_timeout_seconds: float = 30.0
 
+    # API hardening for a public deployment (all default to a safe local-dev
+    # posture; override via SENTINEL_* env vars when the server goes live).
+    # api_allowed_origins: comma-separated exact origins for the deployed
+    # dashboard (e.g. "https://sentinel.example.com"); empty keeps the
+    # localhost-only CORS regex used in development.
+    api_allowed_origins: str = ""
+    # Reject pasted text above this many characters (the /map-techniques body);
+    # the model only ever encodes the first 60 sentences, this bounds parsing.
+    api_max_request_chars: int = 20_000
+    # Per-client fixed-window rate limit on the expensive inference route.
+    api_rate_limit_requests: int = 30
+    api_rate_limit_window_seconds: float = 60.0
+    # Hard cap on concurrent model inferences (bounds peak RAM/CPU); requests
+    # that can't acquire a slot within the timeout get a 503 rather than piling
+    # up and exhausting memory.
+    api_inference_concurrency: int = 2
+    api_inference_acquire_timeout_seconds: float = 15.0
+    # Warm the technique mapper in a background thread at startup so the first
+    # public request doesn't pay the ~20s model load (off in dev/tests).
+    api_warm_model: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

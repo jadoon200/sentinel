@@ -131,6 +131,14 @@ button:disabled { opacity: 0.4; cursor: default; }
 .xfam-row i { color: var(--hint); }
 .xfam-row .fix-bad { color: var(--bad); }
 .xfam-row .fix-good { color: var(--good); }
+.mapper-input { width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: inherit; font-size: 13px; padding: 10px 12px; resize: vertical; line-height: 1.55; }
+.mapper-input:focus { outline: none; border-color: var(--accent); }
+.mapper-bar { display: flex; align-items: center; gap: 12px; margin: 10px 0 4px; }
+.map-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.map-row:last-child { border-bottom: none; }
+.map-main { flex: 1; min-width: 0; } .map-main div:first-child { font-size: 13.5px; }
+.map-conf { display: flex; align-items: center; gap: 8px; }
+
 .roster-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .roster-row i { font-size: 20px; color: var(--muted); }
 .roster-main { flex: 1; } .roster-main div:first-child { font-size: 13.5px; }

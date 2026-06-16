@@ -5,18 +5,21 @@ tagged reports, IDS alerts, and per-technique evidence across both layers.
 Run locally: `make api` (http://localhost:8000/docs).
 """
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import asynccontextmanager
 from datetime import datetime
-from threading import Lock
+from threading import Lock, Semaphore
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from sentinel.api.limits import RateLimiter
+from sentinel.config import get_settings
 from sentinel.correlate.fusion import build_fusion_context, score_campaign_matches
 from sentinel.db.base import get_session_factory
 from sentinel.db.models import (
@@ -31,21 +34,77 @@ from sentinel.db.models import (
     Vulnerability,
 )
 
+_settings = get_settings()
+
+# Reject a request body larger than this many bytes before it is buffered/parsed
+# (UTF-8 worst case is 4 bytes/char, plus a little JSON overhead) so an oversized
+# upload can't exhaust memory ahead of the precise per-field character check.
+_MAX_BODY_BYTES = _settings.api_max_request_chars * 4 + 1024
+_MAX_REQUEST_CHARS = _settings.api_max_request_chars
+
+_rate_limiter = RateLimiter(
+    _settings.api_rate_limit_requests, _settings.api_rate_limit_window_seconds
+)
+_inference_sem = Semaphore(_settings.api_inference_concurrency)
+_INFERENCE_TIMEOUT = _settings.api_inference_acquire_timeout_seconds
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Optionally warm the heavy mapper off the request path so the first public
+    # request is fast. Best-effort and non-blocking: a failure here (e.g. no
+    # model cache) just leaves the lazy load to the first request.
+    if _settings.api_warm_model:
+        from threading import Thread
+
+        def _warm() -> None:
+            session = get_session_factory()()
+            try:
+                _get_mapper(session)
+            except Exception:  # warm-up is best-effort; first request retries
+                pass
+            finally:
+                session.close()
+
+        Thread(target=_warm, daemon=True).start()
+    yield
+
+
 app = FastAPI(
     title="SENTINEL",
     description="Cyber threat intelligence fusion: OSINT + NLP + IDS in one ATT&CK graph",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
-# Read-only API; the Vite dev server and any local dashboard build may call it.
-# Allow any localhost port — the dashboard's dev-server port varies (5173 by
-# default, but Vite increments when busy and preview tooling assigns its own).
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
+# In development allow any localhost port (the Vite dev-server port varies). In
+# production set SENTINEL_API_ALLOWED_ORIGINS to the deployed dashboard's exact
+# origin(s) — otherwise the browser blocks every cross-origin call.
+if _settings.api_allowed_origins.strip():
+    _origins = [o.strip() for o in _settings.api_allowed_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
+
+
+@app.middleware("http")
+async def limit_body_size(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > _MAX_BODY_BYTES:
+        return JSONResponse({"detail": "request body too large"}, status_code=413)
+    return await call_next(request)
 
 
 def get_session() -> Iterator[Session]:
@@ -57,6 +116,15 @@ def get_session() -> Iterator[Session]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def _client_key(request: Request) -> str:
+    # Behind a reverse proxy the real client is the first X-Forwarded-For hop;
+    # fall back to the socket peer for direct connections.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 # The technique mapper loads SecureBERT (~GB) and encodes 697 ATT&CK docs once.
@@ -71,16 +139,14 @@ def _get_mapper(session: Session) -> Any:
     if _mapper is None:
         with _mapper_lock:
             if _mapper is None:
-                from sentinel.config import get_settings
                 from sentinel.nlp.encoders import BiEncoder
                 from sentinel.nlp.mapper import TechniqueMapper, load_technique_docs
 
-                settings = get_settings()
                 _mapper = TechniqueMapper(
                     load_technique_docs(session),
                     encoder=BiEncoder(),
-                    cache_dir=settings.nlp_embedding_cache_dir,
-                    model_name=settings.nlp_bi_encoder_model,
+                    cache_dir=_settings.nlp_embedding_cache_dir,
+                    model_name=_settings.nlp_bi_encoder_model,
                     lexical=True,  # hybrid retrieval, matching the tagging pipeline
                 )
     return _mapper
@@ -631,7 +697,7 @@ def technique_detail(technique_id: str, session: SessionDep) -> TechniqueDetail:
 
 
 class MapRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=_MAX_REQUEST_CHARS)
 
 
 class MappedTechnique(BaseModel):
@@ -644,23 +710,40 @@ class MappedTechnique(BaseModel):
 
 
 @app.post("/map-techniques")
-def map_techniques(req: MapRequest, session: SessionDep) -> list[MappedTechnique]:
+def map_techniques(req: MapRequest, request: Request, session: SessionDep) -> list[MappedTechnique]:
     """Run the zero-shot ATT&CK mapper over pasted CTI text.
 
     Inspects the supplied text only — it does not fetch or scan any URL. Splits
     into sentences, maps each through the SecureBERT + BM25 hybrid retriever, and
     corroborates the evidence across sentences. Returns the top techniques with
     their score so the UI can show the same mapper that tags ingested reports.
+
+    Hardened for public exposure: per-client rate limit, a bounded concurrency
+    cap on the model so load sheds as 503 instead of exhausting memory, and a
+    503 (not a 500 stack trace) if the model can't be loaded.
     """
     from sentinel.nlp.mapper import aggregate_matches
     from sentinel.nlp.tagging import split_sentences
+
+    if not _rate_limiter.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail="rate limit exceeded, slow down")
 
     sentences = split_sentences(req.text)
     if not sentences:
         return []
 
-    mapper = _get_mapper(session)
-    aggregated = aggregate_matches(mapper.map_text(s, top_k=5) for s in sentences)[:8]
+    # Bound concurrent model runs: shed load gracefully rather than letting many
+    # simultaneous inferences pile up and run the box out of memory.
+    if not _inference_sem.acquire(timeout=_INFERENCE_TIMEOUT):
+        raise HTTPException(status_code=503, detail="mapper busy, try again shortly")
+    try:
+        mapper = _get_mapper(session)
+        aggregated = aggregate_matches(mapper.map_text(s, top_k=5) for s in sentences)[:8]
+    except Exception as exc:  # model load / inference failure — never leak a 500
+        raise HTTPException(status_code=503, detail="technique mapper unavailable") from exc
+    finally:
+        _inference_sem.release()
+
     if not aggregated:
         return []
 

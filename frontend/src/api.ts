@@ -80,8 +80,27 @@ export interface TechniqueListItem {
   tactics: string[];
 }
 
+export interface MappedTechnique {
+  technique_id: string;
+  name: string;
+  score: number;
+  corroborations: number;
+  tactics: string[];
+  url: string | null;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -140,6 +159,7 @@ export const api = {
     get<AlertOut[]>(`/alerts?limit=${limit}${model ? `&model=${model}` : ""}`),
   alertContext: (id: number) => get<AlertContext>(`/alerts/${id}/context`),
   techniques: () => get<TechniqueListItem[]>("/techniques"),
+  mapTechniques: (text: string) => post<MappedTechnique[]>("/map-techniques", { text }),
   trending: () => get<TrendingItem[]>("/trending"),
   drift: () => get<DriftOut>("/feed-drift"),
   briefing: async () => {

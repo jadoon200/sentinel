@@ -7,6 +7,7 @@ Run locally: `make api` (http://localhost:8000/docs).
 
 from collections.abc import Iterator
 from datetime import datetime
+from threading import Lock
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -42,7 +43,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -56,6 +57,33 @@ def get_session() -> Iterator[Session]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+# The technique mapper loads SecureBERT (~GB) and encodes 697 ATT&CK docs once.
+# Lazy-build it on first /map-techniques call and cache the singleton for reuse;
+# the lock guards against a double-build under FastAPI's threadpool.
+_mapper: Any = None
+_mapper_lock = Lock()
+
+
+def _get_mapper(session: Session) -> Any:
+    global _mapper
+    if _mapper is None:
+        with _mapper_lock:
+            if _mapper is None:
+                from sentinel.config import get_settings
+                from sentinel.nlp.encoders import BiEncoder
+                from sentinel.nlp.mapper import TechniqueMapper, load_technique_docs
+
+                settings = get_settings()
+                _mapper = TechniqueMapper(
+                    load_technique_docs(session),
+                    encoder=BiEncoder(),
+                    cache_dir=settings.nlp_embedding_cache_dir,
+                    model_name=settings.nlp_bi_encoder_model,
+                    lexical=True,  # hybrid retrieval, matching the tagging pipeline
+                )
+    return _mapper
 
 
 class Stats(BaseModel):
@@ -600,3 +628,61 @@ def technique_detail(technique_id: str, session: SessionDep) -> TechniqueDetail:
         campaign_count=campaign_count,
         alert_count=alert_count,
     )
+
+
+class MapRequest(BaseModel):
+    text: str
+
+
+class MappedTechnique(BaseModel):
+    technique_id: str
+    name: str
+    score: float
+    corroborations: int
+    tactics: list[str]
+    url: str | None
+
+
+@app.post("/map-techniques")
+def map_techniques(req: MapRequest, session: SessionDep) -> list[MappedTechnique]:
+    """Run the zero-shot ATT&CK mapper over pasted CTI text.
+
+    Inspects the supplied text only — it does not fetch or scan any URL. Splits
+    into sentences, maps each through the SecureBERT + BM25 hybrid retriever, and
+    corroborates the evidence across sentences. Returns the top techniques with
+    their score so the UI can show the same mapper that tags ingested reports.
+    """
+    from sentinel.nlp.mapper import aggregate_matches
+    from sentinel.nlp.tagging import split_sentences
+
+    sentences = split_sentences(req.text)
+    if not sentences:
+        return []
+
+    mapper = _get_mapper(session)
+    aggregated = aggregate_matches(mapper.map_text(s, top_k=5) for s in sentences)[:8]
+    if not aggregated:
+        return []
+
+    meta = {
+        t.technique_id: t
+        for t in session.scalars(
+            select(AttackTechnique).where(
+                AttackTechnique.technique_id.in_([m.technique_id for m in aggregated])
+            )
+        )
+    }
+    results = []
+    for m in aggregated:
+        t = meta.get(m.technique_id)
+        results.append(
+            MappedTechnique(
+                technique_id=m.technique_id,
+                name=m.name,
+                score=m.score,
+                corroborations=m.corroborations,
+                tactics=(t.tactics or []) if t else [],
+                url=t.url if t else None,
+            )
+        )
+    return results

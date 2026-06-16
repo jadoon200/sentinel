@@ -1,3 +1,84 @@
+import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { api } from "../api";
+
+const SAMPLE =
+  "The actor sent a spearphishing email with a malicious Excel attachment. Once macros were " +
+  "enabled it ran a PowerShell script that downloaded a Cobalt Strike beacon over HTTPS and " +
+  "established persistence with a scheduled task.";
+
+const conf = (s: number) => (s >= 0.6 ? "good" : s >= 0.45 ? "mid" : "bad");
+
+function MapperTryIt() {
+  const [text, setText] = useState(SAMPLE);
+  const map = useMutation({ mutationFn: () => api.mapTechniques(text) });
+  return (
+    <section className="panel">
+      <h2>Try the ATT&CK mapper — paste a threat report</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        The same zero-shot model that tags every ingested report, run live on your text. It compares
+        each sentence against 697 ATT&CK technique descriptions (SecureBERT + lexical) and ranks the
+        closest matches. It inspects only the text you paste — it does <b>not</b> fetch or scan any
+        URL.
+      </p>
+      <textarea
+        className="mapper-input"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={4}
+        placeholder="Paste a paragraph from a threat report…"
+      />
+      <div className="mapper-bar">
+        <button onClick={() => map.mutate()} disabled={map.isPending || text.trim().length < 8}>
+          <i className="ti ti-wand" aria-hidden="true" />
+          &nbsp;{map.isPending ? "Mapping…" : "Map to ATT&CK"}
+        </button>
+        <span className="hint">
+          {map.isPending ? "first run loads the model (~20s)" : "zero-shot over 697 techniques"}
+        </span>
+      </div>
+      {map.error && (
+        <p className="error" style={{ padding: "6px 0" }}>
+          mapper unavailable — is the API (`make api`) running?
+        </p>
+      )}
+      {map.data && map.data.length === 0 && (
+        <p className="muted">No techniques cleared the bar — try a longer, more specific paragraph.</p>
+      )}
+      {map.data && map.data.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          {map.data.map((t) => (
+            <div key={t.technique_id} className="map-row">
+              <span className="badge tech">{t.technique_id}</span>
+              <div className="map-main">
+                <div>
+                  {t.url ? (
+                    <a className="navlink" href={t.url} target="_blank" rel="noreferrer">
+                      {t.name}
+                    </a>
+                  ) : (
+                    t.name
+                  )}
+                </div>
+                {t.tactics.length > 0 && <div className="hint">{t.tactics.join(" · ")}</div>}
+              </div>
+              <div className="map-conf">
+                <div className="fix-bar" style={{ width: 72 }}>
+                  <div
+                    className={`fix-fill fix-${conf(t.score)}`}
+                    style={{ width: `${Math.round(t.score * 100)}%` }}
+                  />
+                </div>
+                <span className={`fix-val fix-${conf(t.score)}`}>{t.score.toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const detectors = [
   ["Supervised LightGBM", "known attack families", "seen families ≈ 1.0", "ti-target"],
   ["Benign-only autoencoder", "unseen-family anomalies", "Infiltration 0.84 · DDoS 0.71", "ti-wave-sine"],
@@ -37,6 +118,8 @@ export function ReportCard() {
           exactly where its models break — because it measured it.
         </p>
       </section>
+
+      <MapperTryIt />
 
       <section className="panel">
         <h2>Can we beat the transfer failure? Four fixes, measured</h2>

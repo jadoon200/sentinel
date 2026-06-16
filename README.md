@@ -175,4 +175,7 @@ The dashboard is a question-led three-tab storyline over those endpoints:
 - **Landscape** — trending techniques, feed drift (PSI), the daily briefing, and
   ATT&CK Navigator export.
 - **Model report card** — the honest evaluation story, including the
-  cross-network failure *and* its few-shot fix.
+  cross-network failure *and* its few-shot fix, plus a **"Try the mapper"** panel:
+  paste any CTI paragraph and the live zero-shot mapper ranks the closest ATT&CK
+  techniques (`POST /map-techniques`). It inspects only the pasted text — it does
+  not fetch or scan a URL — so the API stays effectively read-only.

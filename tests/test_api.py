@@ -182,3 +182,32 @@ def test_trending_and_drift_endpoints(client: TestClient) -> None:
     assert client.get("/trending").status_code == 200
     drift = client.get("/feed-drift").json()
     assert "verdict" in drift and "population_stability_index" in drift
+
+
+def test_map_techniques_runs_mapper_over_pasted_text(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Patch the heavy SecureBERT mapper with a stub so the endpoint wiring
+    # (split → aggregate → technique metadata join) is tested without a model load.
+    from sentinel.api import app as api_app
+    from sentinel.nlp.mapper import TechniqueMatch
+
+    class FakeMapper:
+        def map_text(self, text: str, top_k: int = 5) -> list[TechniqueMatch]:
+            return [TechniqueMatch("T1190", "Exploit Public-Facing App", 0.71)]
+
+    monkeypatch.setattr(api_app, "_get_mapper", lambda session: FakeMapper())
+    body = client.post(
+        "/map-techniques",
+        json={"text": "An attacker exploited the public VPN portal to gain initial access."},
+    ).json()
+
+    assert body[0]["technique_id"] == "T1190"
+    assert body[0]["name"] == "Exploit Public-Facing App"  # enriched from the graph
+    assert 0.0 <= body[0]["score"] <= 1.0
+    assert body[0]["corroborations"] == 1
+
+
+def test_map_techniques_empty_text_returns_empty(client: TestClient) -> None:
+    # No sentence clears the word floor — returns early, never touching the model.
+    assert client.post("/map-techniques", json={"text": ""}).json() == []

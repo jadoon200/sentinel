@@ -21,8 +21,16 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <div className="shell">
         <header className="masthead">
-          <h1>SENTINEL</h1>
-          <span>Is anything on the network tied to a known real-world threat?</span>
+          <div className="brand">
+            <svg className="brand-mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" strokeWidth="1.4" opacity="0.45" />
+              <circle cx="12" cy="12" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.4" opacity="0.85" />
+              <path d="M12 12 L19 6.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+            </svg>
+            <h1>SENTINEL</h1>
+          </div>
+          <p className="tagline">Is anything on the network tied to a known real-world threat?</p>
         </header>
         <nav className="tabs">
           {TABS.map((t) => (

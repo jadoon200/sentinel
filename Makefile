@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon eval-beacon-ctu13 sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon eval-beacon-ctu13 sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency eval-conformal eval-conformal-cross migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -100,6 +100,15 @@ eval-ensemble:
 # Cross-dataset generalization: train 2017, test 2018 (downloads a 2018 day)
 eval-cross:
 	python scripts/eval_cross_dataset.py
+
+# Threshold-policy shoot-out on the temporal split: static p99 vs conformal vs
+# the label-free budget controller (the drift-robust operating point)
+eval-conformal:
+	python scripts/eval_conformal.py
+
+# Does label-free recalibration recover detection across networks? (2017->2018)
+eval-conformal-cross:
+	python scripts/eval_conformal_cross.py
 
 # Print the auto-generated daily threat briefing (needs make up + make api)
 briefing:

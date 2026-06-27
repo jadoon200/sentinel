@@ -59,6 +59,13 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     parser.add_argument("--supervised-threshold", type=float, default=0.5)
     parser.add_argument("--anomaly-percentile", type=float, default=99.0)
     parser.add_argument("--anomaly-epochs", type=int, default=5)
+    parser.add_argument(
+        "--conformal",
+        action="store_true",
+        help="gate the one-sided anomaly detectors (autoencoder, profile) with "
+        "the online conformal alert-budget controller instead of a fixed benign "
+        "percentile (drift-robust); sequence/beacon keep the percentile",
+    )
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
@@ -99,16 +106,21 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
         epochs=args.anomaly_epochs,
         seed=args.seed,
     )
-    threshold = float(
-        np.percentile(
-            reconstruction_errors(autoencoder, scaler.transform(holdout)),
-            args.anomaly_percentile,
-        )
-    )
+    holdout_errors = reconstruction_errors(autoencoder, scaler.transform(holdout))
     errors = reconstruction_errors(autoencoder, scaler.transform(x_test))
+    if args.conformal:
+        # Online alert-budget control instead of a fixed benign percentile (whose
+        # true FPR drifts on Thu-Fri — see conformal.py): hold the alert rate near
+        # the (100 - percentile)% budget as benign traffic shifts.
+        from sentinel.ids.conformal import budget_alerts
+
+        flagged = budget_alerts(holdout_errors, errors, args.anomaly_percentile)
+    else:
+        threshold = float(np.percentile(holdout_errors, args.anomaly_percentile))
+        flagged = errors > threshold
     # Anomaly alerts only where the supervised model saw nothing — the
     # ensemble's job is covering unseen attack families, not double-alerting.
-    is_anomaly = (errors > threshold) & ~is_attack_prediction
+    is_anomaly = flagged & ~is_attack_prediction
 
     alerts: list[Alert] = []
     supervised_order = np.argsort(-confidence)
@@ -191,11 +203,21 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     prof_rng = np.random.default_rng(args.seed)
     prof_holdout = prof_rng.random(len(benign_stats)) < 0.1
     prof_scorer = ProfileScorer().fit(benign_stats[~prof_holdout])
-    prof_threshold = float(np.percentile(prof_scorer.score(benign_stats[prof_holdout]), 99.0))
+    prof_holdout_scores = prof_scorer.score(benign_stats[prof_holdout])
+    prof_threshold = float(np.percentile(prof_holdout_scores, 99.0))
     prof_test_stats, prof_last = build_window_stats(flows.loc[x_test.index].reset_index(drop=True))
     prof_scores = prof_scorer.score(prof_test_stats)
     dominant = prof_scorer.dominant_stat(prof_test_stats)
-    prof_idx = np.flatnonzero(prof_scores > prof_threshold)
+    # Profile scores are one-sided (excess fan-out), so the budget controller
+    # applies here too. Sequence (two-sided: also alerts suspiciously-low error)
+    # and beacon (a static per-channel set, not a time-ordered stream) keep the
+    # fixed percentile — the controller's rate/drift model doesn't fit them.
+    if args.conformal:
+        from sentinel.ids.conformal import budget_alerts
+
+        prof_idx = np.flatnonzero(budget_alerts(prof_holdout_scores, prof_scores, 99.0))
+    else:
+        prof_idx = np.flatnonzero(prof_scores > prof_threshold)
     for j in prof_idx[np.argsort(-prof_scores[prof_idx])][: args.max_alerts]:
         i = int(prof_last[j])
         alerts.append(

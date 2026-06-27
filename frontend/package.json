@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,8 +15,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "recharts": "^3.8.1"
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

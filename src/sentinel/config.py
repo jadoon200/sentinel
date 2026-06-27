@@ -104,9 +104,15 @@ class Settings(BaseSettings):
     # Reject pasted text above this many characters (the /map-techniques body);
     # the model only ever encodes the first 60 sentences, this bounds parsing.
     api_max_request_chars: int = 20_000
-    # Per-client fixed-window rate limit on the expensive inference route.
+    # Per-client sliding-window rate limit on the expensive inference route.
     api_rate_limit_requests: int = 30
     api_rate_limit_window_seconds: float = 60.0
+    # Derive the rate-limit client key from the X-Forwarded-For header. Leave
+    # off unless the API sits behind a trusted reverse proxy that sets it —
+    # when the server is directly reachable a client can spoof the header to
+    # rotate fake IPs and evade the per-client limit, so the socket peer is the
+    # safe default.
+    api_trust_forwarded_header: bool = False
     # Hard cap on concurrent model inferences (bounds peak RAM/CPU); requests
     # that can't acquire a slot within the timeout get a 503 rather than piling
     # up and exhausting memory.

@@ -59,6 +59,32 @@ def test_parse_atom_feed() -> None:
     assert report.tags == ["advisory"]
 
 
+# Blogspot/Project-Zero style entry: rel="replies" (comments feed) listed before
+# the rel="alternate" post URL — taking the first <link> would store the wrong one.
+ATOM_MULTILINK_FEED = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>tag:blog,2026:post-7</id>
+    <title>Exploiting a kernel bug</title>
+    <link rel="replies" type="application/atom+xml" href="https://blog.example/feeds/7/comments"/>
+    <link rel="edit" href="https://blog.example/edit/7"/>
+    <link rel="self" href="https://blog.example/self/7"/>
+    <link rel="alternate" type="text/html" href="https://blog.example/2026/exploiting-a-kernel-bug"/>
+    <summary>Deep dive into the bug.</summary>
+    <updated>2026-06-08T12:00:00Z</updated>
+  </entry>
+</feed>
+"""
+
+
+def test_atom_prefers_alternate_link_over_replies() -> None:
+    reports = parse_feed(ATOM_MULTILINK_FEED)
+
+    assert len(reports) == 1
+    # The article URL, not the rel="replies" comments feed that appears first.
+    assert reports[0].url == "https://blog.example/2026/exploiting-a-kernel-bug"
+
+
 def test_parse_feed_records_provenance() -> None:
     reports = parse_feed(RSS_FEED, source="talos")
     assert reports[0].source == "talos"  # feed label, not a generic "rss"

@@ -86,3 +86,41 @@ def test_simulated_hosts_are_held_out() -> None:
 
     assert "10.0.0.99" not in {t.host for t in live}
     assert "10.0.0.99" in {t.host for t in all_hosts}
+
+
+def test_sqli_excluded_from_flow_agreement_but_drives_severity() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        # Host 1: all five flow detectors agree.
+        for model, score in [
+            ("lightgbm-multiclass", 0.9),
+            ("autoencoder", 9.0),
+            ("sequence", 9.0),
+            ("profile", 9.0),
+            ("beacon", 9.0),
+        ]:
+            session.add(Alert(model=model, score=score, source_host="10.0.0.1", true_label="Bot"))
+        # Host 2: only four flow detectors, plus a SQLi (WAF) detection.
+        for model, score in [
+            ("lightgbm-multiclass", 0.9),
+            ("autoencoder", 9.0),
+            ("sequence", 9.0),
+            ("profile", 9.0),
+            ("sqli", 0.5),
+        ]:
+            session.add(
+                Alert(model=model, score=score, source_host="10.0.0.2", true_label="Web Attack")
+            )
+        # Hosts seen only by the SQLi detector, at high vs low confidence.
+        session.add(Alert(model="sqli", score=0.95, source_host="10.0.0.3"))
+        session.add(Alert(model="sqli", score=0.05, source_host="10.0.0.4"))
+        session.commit()
+        threats = {t.host: t for t in host_threats(session)}
+
+    # SQLi must not substitute for a flow detector: 4 flow + SQLi ranks below 5 flow,
+    # even though SQLi is still listed in the host's detector rollup.
+    assert threats["10.0.0.2"].risk < threats["10.0.0.1"].risk
+    assert "sqli" in threats["10.0.0.2"].detectors
+    # A pure-SQLi host is still scored, and its calibrated probability drives risk.
+    assert threats["10.0.0.3"].risk > threats["10.0.0.4"].risk

@@ -18,6 +18,7 @@ belt-and-suspenders — the reverse proxy is the primary defence.
 | `SENTINEL_API_MAX_REQUEST_CHARS` | `20000` | Max characters of pasted text; longer → `422`. Also drives an early `413` body-size cut-off (≈4 bytes/char) before the body is buffered. |
 | `SENTINEL_API_RATE_LIMIT_REQUESTS` | `30` | Per-client requests allowed per window on `/map-techniques`; over → `429`. |
 | `SENTINEL_API_RATE_LIMIT_WINDOW_SECONDS` | `60` | The rate-limit window. |
+| `SENTINEL_API_TRUST_FORWARDED_HEADER` | `false` | Derive the per-client rate-limit key from the first `X-Forwarded-For` hop. Leave **off** unless the API is behind a trusted proxy that sets it — on a directly-exposed server the header is client-controlled, so an attacker could rotate it to dodge the limit. Off → the socket peer IP is used. Set `true` when deploying behind the reverse proxy below. |
 | `SENTINEL_API_INFERENCE_CONCURRENCY` | `2` | Hard cap on simultaneous model inferences; bounds peak RAM/CPU. Excess requests wait, then `503`. |
 | `SENTINEL_API_INFERENCE_ACQUIRE_TIMEOUT_SECONDS` | `15` | How long a request waits for a free inference slot before `503`. |
 | `SENTINEL_API_WARM_MODEL` | `false` | Set `true` in prod to warm the mapper in a background thread at startup so the first public request doesn't pay the ~20s model load. |
@@ -34,8 +35,10 @@ for real limits put them at the reverse proxy (below).
   - `limit_req` for robust, cross-worker rate limiting.
   - TLS termination (HTTPS). Set `SENTINEL_API_ALLOWED_ORIGINS` to the `https://`
     origin.
-  - Forward the real client IP (`X-Forwarded-For`); the app already reads the
-    first hop for per-client limiting.
+  - Forward the real client IP (`X-Forwarded-For`) and set
+    `SENTINEL_API_TRUST_FORWARDED_HEADER=true` so the app keys per-client limits
+    on the first hop. It is **ignored by default** — on a directly-exposed
+    server the header is spoofable, so only trust it once a proxy sets it.
 - **Don't expose the dev server.** Run uvicorn behind the proxy with a sane
   worker count (`uvicorn ... --workers N`), not bound to a public interface.
 - **Sizing.** The mapper holds SecureBERT (~GB) in memory. Give the host enough
@@ -49,6 +52,7 @@ for real limits put them at the reverse proxy (below).
 ```bash
 SENTINEL_API_ALLOWED_ORIGINS=https://sentinel.example.com
 SENTINEL_API_WARM_MODEL=true
+SENTINEL_API_TRUST_FORWARDED_HEADER=true  # behind a trusted proxy that sets X-Forwarded-For
 # defaults are reasonable; tighten the rate limit if the host is small:
 # SENTINEL_API_RATE_LIMIT_REQUESTS=10
 # SENTINEL_API_INFERENCE_CONCURRENCY=1

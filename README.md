@@ -59,9 +59,14 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
 - **Conformal alert-budget control (within-network).** A label-free online
   controller re-derives the operating point from the target network's own benign
   traffic, holding the alert rate at a 1% budget through within-network drift
-  (FPR 1.10%) while rare attacks keep alerting (Infiltration 0.84, XSS 0.70) —
-  the answer to drift *within* a network, measured to its limit against the
-  cross-network case above.
+  (FPR 1.10%, vs the static p99 threshold drifting to 5.96%) while rare attacks
+  keep alerting (Infiltration 0.84, XSS 0.70) — the answer to drift *within* a
+  network, measured to its limit against the cross-network case above. Shipped in
+  the flow-replay service (`make replay` / `python -m sentinel.ids.replay
+  --conformal`), not just an offline study — and enabling it costs the ensemble
+  nothing: 7/7 unseen families stay covered (`make eval-ensemble --conformal`),
+  since the percentile/supervised specialists carry the volumetric families the
+  budget cap trims.
 - **Host-fusion threat rollups.** Per-flow alerts roll up into per-host threats:
   each host shows which detectors agree, its unioned ATT&CK techniques, a
   transparent risk score, and the real-world CTI campaign it fuses with — each

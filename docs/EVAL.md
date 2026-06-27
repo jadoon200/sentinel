@@ -378,14 +378,49 @@ changes: one-sided split-conformal p-values against benign calibration scores
 (finite-sample FPR guarantee under exchangeability), and a label-free online
 controller that regulates the **alert rate** — ACI's update rule with the
 interval-miss signal replaced by the alert indicator, since live NIDS has no
-ground truth. Reproduce: `python scripts/eval_conformal.py` (autoencoder
-scores, Thu–Fri processed chronologically).
+ground truth. Reproduce: `make eval-conformal` (autoencoder scores, Thu–Fri
+processed chronologically).
 
 | Policy | alert rate | FPR | recall DDoS / Infiltration / XSS |
 |---|---|---|---|
 | static p99 | 10.7% | 5.96% | 0.60 / 0.84 / 0.67 |
 | conformal p ≤ 0.01 | 10.7% | 5.96% | 0.60 / 0.84 / 0.67 |
 | **budget controller (α=1%)** | **0.99%** | **1.10%** | 0.008 / **0.84** / **0.70** |
+
+The controller is not just an offline study: the flow-replay service can gate its
+one-sided anomaly detectors (autoencoder, profile) through it with `python -m
+sentinel.ids.replay --conformal` (sequence is two-sided and beacon is a static
+per-channel set, so both keep the percentile). The default stays the fixed benign
+percentile so the recorded ensemble numbers reproduce; `--conformal` is the
+drift-robust operating mode.
+
+### Does enabling `--conformal` cost ensemble coverage? (`make eval-ensemble --conformal`)
+
+The budget controller is opt-in because it trades a detector's *own* recall for a
+bounded alert rate. The question for adoption is whether that costs the
+**ensemble** anything — and it doesn't, because the budget-capped detectors
+(autoencoder, profile) are not the specialists for the families a 1% rate cap
+suppresses. Same temporal split, best detector per unseen family, percentile vs
+conformal:
+
+| Unseen family | best specialist (recall, unchanged) | autoencoder p99 → conformal | profile p99 → conformal |
+|---|---|---|---|
+| DDoS | supervised **1.000** | 0.70 → 0.04 | 0.00 → 0.00 |
+| Infiltration | supervised **0.938** | 0.84 → 0.62 | 0.33 → 0.00 |
+| PortScan | beacon **1.000** | 0.01 → 0.00 | 1.00 → 0.01 |
+| Bot | beacon **1.000** | 0.06 → 0.03 | 0.00 → 0.04 |
+| Web Brute Force | sequence/supervised **1.000** | 0.48 → 0.48 | 0.00 |
+| Web XSS | sequence/supervised **1.000** | 0.67 → 0.67 | 0.00 |
+| Web SQL Injection | supervised **1.000** | 0.00 | 0.00 |
+
+**7/7 unseen families stay covered at recall ≥ 0.93 under `--conformal`.** The cap
+visibly lowers the gated detectors' own recall — most where a 1% budget cannot
+represent a high-prevalence attack (autoencoder DDoS 0.70→0.04, profile PortScan
+1.00→0.01); sparse families it barely touches (XSS 0.67 unchanged). But every
+family's specialist is a *percentile / supervised* detector (supervised DDoS 1.0,
+beacon PortScan/Bot 1.0), so the ensemble loses nothing. The empirical case for
+`--conformal` as a safe operating mode: it buys the drift-robust **1.10% FPR (vs
+the static p99's 5.96%)** at **no cost to ensemble coverage**.
 
 Findings:
 

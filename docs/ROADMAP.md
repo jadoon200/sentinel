@@ -25,7 +25,8 @@ Research extensions that exceeded the original plan, all recorded in
   they cover 7/7 unseen Thu–Fri families at recall ≥0.93 (`make eval-ensemble`).
 - **Conformal alert-budget control** — split-conformal p-values with a
   label-free online controller that holds the alert rate at target through
-  benign drift.
+  benign drift (1.10% FPR where the static p99 threshold drifts to 5.96%), wired
+  into the flow-replay service as the `--conformal` operating mode.
 - **Cross-dataset generalization eval** — train CIC-IDS2017, test
   CSE-CIC-IDS2018; the project's headline honesty result.
 - **Cross-network transfer fix** — the headline. A 2017-trained IDS detects

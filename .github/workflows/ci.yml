@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Cancel an in-progress run when a newer commit lands on the same ref, so rapid
+# pushes don't stack CI runs (and burn Actions minutes).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -68,7 +75,13 @@ jobs:
         run: npm run build
 
   # Exercises the MLX backends (anomaly_mlx, sequence) that Linux can't import.
+  # macOS runners bill at a 10x minute multiplier, so this is opt-in: it runs only
+  # on a manual `workflow_dispatch` (Actions tab -> Run workflow), not on every
+  # push/PR. Trigger it before merging changes that touch the MLX backends; routine
+  # PR coverage is the ubuntu `checks` + `frontend` jobs above (Linux uses the torch
+  # fallback). MLX tests otherwise run locally on Apple silicon.
   macos-mlx:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v5

@@ -25,6 +25,7 @@ conflicting native libraries that segfault when trained together in one process.
 Run (heavy — trains the full ensemble): python scripts/eval_ensemble.py
 """
 
+import argparse
 import re
 import subprocess
 import sys
@@ -40,6 +41,9 @@ LABELS = {
 # Supervised needs the temporal split + benign calibration to be on the same
 # unseen-family, ~1%-FPR footing as the unsupervised detectors.
 ARGS = {"train": ["--split", "temporal", "--calibrate-fpr", "0.01"]}
+# --conformal applies only to the one-sided budget-controllable detectors;
+# sequence (two-sided) and beacon (per-channel set) keep their percentile.
+CONFORMAL_DETECTORS = {"anomaly", "profile"}
 _RECALL = re.compile(r"^recall__(.+?):\s*([0-9.]+)\s*$", re.MULTILINE)
 
 
@@ -49,11 +53,22 @@ def _family(raw: str) -> str:
 
 
 def main() -> dict[str, tuple[str, float]]:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--conformal",
+        action="store_true",
+        help="gate the one-sided detectors (autoencoder, profile) with the budget controller",
+    )
+    args = parser.parse_args()
+    if args.conformal:
+        print("ensemble mode: conformal budget control on autoencoder + profile\n")
+
     per_family: dict[str, list[tuple[str, float]]] = {}
     for module in DETECTORS:
+        extra = ["--conformal"] if (args.conformal and module in CONFORMAL_DETECTORS) else []
         print(f"running {LABELS[module]} ({module})...", flush=True)
         result = subprocess.run(
-            [sys.executable, "-m", f"sentinel.ids.{module}", *ARGS.get(module, [])],
+            [sys.executable, "-m", f"sentinel.ids.{module}", *ARGS.get(module, []), *extra],
             capture_output=True,
             text=True,
         )

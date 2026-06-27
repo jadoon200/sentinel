@@ -102,6 +102,12 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser.add_argument("--sample", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--threshold-percentile", type=float, default=99.0)
+    parser.add_argument(
+        "--conformal",
+        action="store_true",
+        help="gate alerts with the online budget controller (drift-robust) "
+        "instead of the fixed benign percentile",
+    )
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
@@ -124,13 +130,15 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     scaler = FlowScaler().fit(fit_set)
     model = train_autoencoder(scaler.transform(fit_set), epochs=args.epochs, seed=args.seed)
 
-    threshold = float(
-        np.percentile(
-            reconstruction_errors(model, scaler.transform(holdout)), args.threshold_percentile
-        )
-    )
+    holdout_errors = reconstruction_errors(model, scaler.transform(holdout))
+    threshold = float(np.percentile(holdout_errors, args.threshold_percentile))
     errors = reconstruction_errors(model, scaler.transform(x_test))
-    alerts = errors > threshold
+    if args.conformal:
+        from sentinel.ids.conformal import budget_alerts
+
+        alerts = budget_alerts(holdout_errors, errors, args.threshold_percentile)
+    else:
+        alerts = errors > threshold
 
     metrics = {
         "roc_auc": float(roc_auc_score(y_test, errors)),
@@ -147,6 +155,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
                 "epochs": args.epochs,
                 "threshold_percentile": args.threshold_percentile,
                 "threshold": threshold,
+                "conformal": args.conformal,
                 "n_benign_train": len(fit_set),
                 "n_test": len(x_test),
                 "sample": args.sample or "full",

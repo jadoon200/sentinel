@@ -80,14 +80,29 @@ def _parse_rss_items(root: ElementTree.Element, source: str) -> list[ThreatRepor
     return reports
 
 
+def _atom_link(entry: ElementTree.Element) -> str | None:
+    """The entry's human-readable article URL.
+
+    An Atom entry can carry several <link>s (rel=alternate/self/edit/replies).
+    Blogspot feeds (e.g. Project Zero) list rel="replies" first, so taking the
+    first link would store the comments-feed URL instead of the post. Prefer the
+    alternate link — or one with no rel, which Atom defines as alternate — and
+    fall back to the first link only if there is no better candidate.
+    """
+    links = entry.findall(f"{ATOM_NS}link")
+    for link in links:
+        if link.get("rel") in (None, "alternate"):
+            return link.get("href")
+    return links[0].get("href") if links else None
+
+
 def _parse_atom_entries(root: ElementTree.Element, source: str) -> list[ThreatReport]:
     reports = []
     for entry in root.findall(f"{ATOM_NS}entry"):
         title = _clean(entry.findtext(f"{ATOM_NS}title"))
         if not title:
             continue
-        link_el = entry.find(f"{ATOM_NS}link")
-        link = link_el.get("href") if link_el is not None else None
+        link = _atom_link(entry)
         summary = entry.findtext(f"{ATOM_NS}summary") or entry.findtext(f"{ATOM_NS}content")
         published = entry.findtext(f"{ATOM_NS}published") or entry.findtext(f"{ATOM_NS}updated")
         reports.append(

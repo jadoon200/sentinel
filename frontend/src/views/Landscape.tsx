@@ -28,7 +28,7 @@ export function Landscape() {
             {drift.data ? drift.data.verdict : "—"}
           </div>
           <div className="mh">
-            source-mix PSI {drift.data ? drift.data.population_stability_index.toFixed(1) : "—"}
+            source-mix PSI {drift.data ? drift.data.population_stability_index.toFixed(2) : "—"}
           </div>
         </div>
         <div className="metric">

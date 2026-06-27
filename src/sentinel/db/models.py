@@ -55,12 +55,12 @@ class ThreatReport(Base):
     __tablename__ = "threat_reports"
 
     report_id: Mapped[str] = mapped_column(String(255), primary_key=True)  # "<source>:<id>"
-    source: Mapped[str] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(32), index=True)  # filtered + drift analytics
     title: Mapped[str] = mapped_column(Text())
     summary: Mapped[str | None] = mapped_column(Text())
     url: Mapped[str | None] = mapped_column(String(2048))
     author: Mapped[str | None] = mapped_column(String(255))
-    published: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     tags: Mapped[list[str] | None] = mapped_column(JsonType)
     # Technique IDs asserted by the report author (OTX pulses) — kept separate
     # from NLP-derived report_techniques edges so they can serve as gold labels.
@@ -78,8 +78,10 @@ class ReportTechnique(Base):
     __tablename__ = "report_techniques"
 
     report_id: Mapped[str] = mapped_column(ForeignKey("threat_reports.report_id"), primary_key=True)
+    # Indexed for technique-first lookups (e.g. /techniques/{id}); the composite
+    # PK only accelerates report-first access.
     technique_id: Mapped[str] = mapped_column(
-        ForeignKey("attack_techniques.technique_id"), primary_key=True
+        ForeignKey("attack_techniques.technique_id"), primary_key=True, index=True
     )
     score: Mapped[float] = mapped_column(Float())
     corroborations: Mapped[int] = mapped_column(Integer())
@@ -127,7 +129,7 @@ class CampaignTechnique(Base):
 
     campaign_id: Mapped[str] = mapped_column(ForeignKey("campaigns.campaign_id"), primary_key=True)
     technique_id: Mapped[str] = mapped_column(
-        ForeignKey("attack_techniques.technique_id"), primary_key=True
+        ForeignKey("attack_techniques.technique_id"), primary_key=True, index=True
     )
     corroborations: Mapped[int] = mapped_column(Integer())
     score: Mapped[float] = mapped_column(Float())
@@ -148,7 +150,8 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     alert_id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
-    model: Mapped[str] = mapped_column(String(32))  # "lightgbm-multiclass" | "autoencoder"
+    # Indexed: /alerts?model= filter and the replay's delete-by-model rebuild.
+    model: Mapped[str] = mapped_column(String(32), index=True)  # "lightgbm-multiclass" | ...
     day: Mapped[str | None] = mapped_column(String(16))
     score: Mapped[float] = mapped_column(Float())
     predicted_label: Mapped[str | None] = mapped_column(String(64))
@@ -156,11 +159,12 @@ class Alert(Base):
     techniques: Mapped[list[str] | None] = mapped_column(JsonType)
     # Source host the detection is attributed to — used only for grouping
     # alerts into per-host threats (the fusion rollup), never as a model
-    # feature. Recovered from flow data at persist time.
-    source_host: Mapped[str | None] = mapped_column(String(64))
+    # feature. Recovered from flow data at persist time. Indexed for that grouping.
+    source_host: Mapped[str | None] = mapped_column(String(64), index=True)
     # Marks held-out detections reserved for the dashboard's "simulate" queue,
-    # revealed on demand to mimic a live feed (real data, shown later).
-    simulated: Mapped[bool] = mapped_column(Boolean(), default=False)
+    # revealed on demand to mimic a live feed (real data, shown later). Indexed:
+    # the host rollup filters on it.
+    simulated: Mapped[bool] = mapped_column(Boolean(), default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now().astimezone()
     )

@@ -102,6 +102,24 @@ class AlertBudgetController:
         return BudgetResult(alerts=alerts, alpha_path=alphas, threshold_path=thresholds)
 
 
+def budget_alerts(
+    calibration: NDArray[np.float64],
+    scores: NDArray[np.float64],
+    percentile: float,
+    gamma: float = 0.005,
+) -> NDArray[np.bool_]:
+    """One-sided budget-controlled alert mask for a score stream — the drop-in
+    replacement for ``scores > percentile(calibration, p)``.
+
+    Targets the same (100 - ``percentile``)% nominal alert rate a fixed threshold
+    aims for, but adapts online so the realized rate holds under benign drift
+    instead of inflating (see ``AlertBudgetController``). For detectors whose
+    score is one-sided (higher = more anomalous) and processed in stream order.
+    """
+    alpha = min(max((100.0 - percentile) / 100.0, 1e-6), 0.999)
+    return AlertBudgetController(calibration, alpha=alpha, gamma=gamma).run(scores).alerts
+
+
 def empirical_fpr(alerts: NDArray[np.bool_], is_benign: NDArray[np.bool_]) -> float:
     benign_alerts = alerts[is_benign]
     return float(benign_alerts.mean()) if len(benign_alerts) else 0.0

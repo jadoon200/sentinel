@@ -1,6 +1,6 @@
 """Lightweight, dependency-free guards so the public API survives load and abuse.
 
-Single-process and in-memory: a per-client fixed-window rate limiter and (in
+Single-process and in-memory: a per-client sliding-window rate limiter and (in
 app.py) a global concurrency cap on the expensive inference route. For a
 multi-worker deployment, move rate limiting to the reverse proxy (nginx
 `limit_req`); these bound one process and degrade gracefully (429/503) rather
@@ -19,7 +19,7 @@ _SWEEP_THRESHOLD = 10_000
 
 
 class RateLimiter:
-    """Fixed-window per-key rate limit. ``allow(key)`` is O(1) amortized."""
+    """Sliding-window per-key rate limit. ``allow(key)`` is O(1) amortized."""
 
     def __init__(self, max_requests: int, window_seconds: float) -> None:
         self._max = max_requests

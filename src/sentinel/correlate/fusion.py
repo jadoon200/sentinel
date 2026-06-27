@@ -153,7 +153,7 @@ def technique_idf(session: Session) -> dict[str, float]:
     return {tid: (value - lo) / (hi - lo) for tid, value in raw.items()}
 
 
-def _campaign_ages(session: Session, now: datetime | None) -> dict[str, float]:
+def campaign_ages(session: Session, now: datetime | None = None) -> dict[str, float]:
     """Age in days of every campaign's most recent member report.
 
     A campaign's "freshness" is the latest publish (falling back to ingest) time
@@ -212,7 +212,7 @@ def build_fusion_context(session: Session, now: datetime | None = None) -> Fusio
         half_life_days=get_settings().fusion_recency_half_life_days,
         edges_by_campaign=edges_by_campaign,
         campaigns=campaigns,
-        ages=_campaign_ages(session, now),
+        ages=campaign_ages(session, now),
         kev_by_campaign=_kev_by_campaign(session, campaigns),
     )
 

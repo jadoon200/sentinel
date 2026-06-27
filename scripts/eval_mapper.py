@@ -34,7 +34,9 @@ CACHE = Path("data/tram_bootstrap.json")
 def load_tram_sentences() -> list[dict[str, Any]]:
     if not CACHE.exists():
         CACHE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE.write_bytes(httpx.get(TRAM_URL, timeout=120.0).content)
+        response = httpx.get(TRAM_URL, timeout=120.0)
+        response.raise_for_status()  # don't cache a 404/error body as if it were data
+        CACHE.write_bytes(response.content)
     sentences = json.loads(CACHE.read_text())["sentences"]
     return [s for s in sentences if s.get("mappings") and len(s["text"].split()) >= 4]
 

@@ -247,6 +247,11 @@ operating points).
 - **FPR drift under distribution shift:** the autoencoder's observed 6.3% FPR
   exceeds the calibrated 1% because Thu–Fri benign traffic differs from Mon–Wed
   benign traffic. Thresholds calibrated on one period do not transfer cleanly.
+  Mitigation shipped: the replay service can gate anomaly alerts through the
+  label-free budget controller (`python -m sentinel.ids.replay --conformal`),
+  which holds the alert rate at the 1% budget under this drift (1.10% FPR vs the
+  static p99's 5.96%, `make eval-conformal`) — at the cost of volumetric-attack
+  recall, so it stays opt-in.
 - **Single-testbed dataset:** all IDS results are CIC-IDS2017 only; the
   documented within-dataset inflation means random-split AUCs do not predict
   cross-network performance. The 2017→2018 transfer collapses to ~0 recall and

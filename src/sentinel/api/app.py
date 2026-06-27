@@ -11,16 +11,20 @@ from datetime import datetime
 from threading import Lock, Semaphore
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from sentinel.api.limits import RateLimiter
 from sentinel.config import get_settings
-from sentinel.correlate.fusion import build_fusion_context, score_campaign_matches
+from sentinel.correlate.fusion import (
+    build_fusion_context,
+    campaign_ages,
+    score_campaign_matches,
+)
 from sentinel.db.base import get_session_factory
 from sentinel.db.models import (
     Alert,
@@ -116,14 +120,20 @@ def get_session() -> Iterator[Session]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
+# Analytics lookback window, bounded so a query param can't request a degenerate
+# (<=0) or absurd range.
+WindowDays = Annotated[int, Query(ge=1, le=365)]
 
 
 def _client_key(request: Request) -> str:
-    # Behind a reverse proxy the real client is the first X-Forwarded-For hop;
-    # fall back to the socket peer for direct connections.
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # Behind a *trusted* reverse proxy the real client is the first
+    # X-Forwarded-For hop. Only honour it when api_trust_forwarded_header is set,
+    # otherwise the socket peer is used: on a directly-exposed server the header
+    # is attacker-controlled and rotating it would defeat the rate limit.
+    if _settings.api_trust_forwarded_header:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -302,7 +312,13 @@ def _report_summary(session: Session, report: ThreatReport) -> ReportSummary:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+def health(session: SessionDep) -> dict[str, str]:
+    """Readiness check: confirms the process is up *and* the database answers, so
+    a load balancer can tell "serving" from merely "running"."""
+    try:
+        session.execute(text("SELECT 1"))
+    except Exception as exc:  # DB down/unreachable — report unready, don't 500
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
     return {"status": "ok"}
 
 
@@ -369,7 +385,9 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> CampaignDetail:
         kev_cves=_kev_overlap(session, campaign.cve_ids),
         report_count=campaign.report_count,
         techniques=_campaign_techniques(session, campaign_id),
-        age_days=build_fusion_context(session).ages.get(campaign_id),
+        # Same corpus-anchored age the /campaigns list uses, via one query
+        # rather than building the whole fusion context for a single campaign.
+        age_days=campaign_ages(session).get(campaign_id),
         reports=[_report_summary(session, r) for r in reports],
     )
 
@@ -384,7 +402,7 @@ def list_reports(
     query = (
         select(ThreatReport)
         .order_by(ThreatReport.ingested_at.desc())
-        .limit(min(limit, 200))
+        .limit(min(max(limit, 1), 200))  # floor at 1: a negative LIMIT errors on Postgres
         .offset(max(offset, 0))
     )
     if source is not None:
@@ -399,7 +417,12 @@ def list_alerts(
     limit: int = 50,
     offset: int = 0,
 ) -> list[AlertOut]:
-    query = select(Alert).order_by(Alert.score.desc()).limit(min(limit, 200)).offset(max(offset, 0))
+    query = (
+        select(Alert)
+        .order_by(Alert.score.desc())
+        .limit(min(max(limit, 1), 200))  # floor at 1: a negative LIMIT errors on Postgres
+        .offset(max(offset, 0))
+    )
     if model is not None:
         query = query.where(Alert.model == model)
     return [
@@ -566,7 +589,7 @@ class DriftOut(BaseModel):
 
 
 @app.get("/trending")
-def trending(session: SessionDep, window_days: int = 7) -> list[TrendingOut]:
+def trending(session: SessionDep, window_days: WindowDays = 7) -> list[TrendingOut]:
     from sentinel.correlate.trending import trending_techniques
 
     return [
@@ -582,7 +605,7 @@ def trending(session: SessionDep, window_days: int = 7) -> list[TrendingOut]:
 
 
 @app.get("/feed-drift")
-def feed_drift_endpoint(session: SessionDep, window_days: int = 7) -> DriftOut:
+def feed_drift_endpoint(session: SessionDep, window_days: WindowDays = 7) -> DriftOut:
     from sentinel.correlate.trending import feed_drift
 
     drift = feed_drift(session, window_days=window_days)
@@ -594,13 +617,20 @@ def feed_drift_endpoint(session: SessionDep, window_days: int = 7) -> DriftOut:
 
 
 @app.get("/briefing", response_class=PlainTextResponse)
-def briefing(session: SessionDep, window_days: int = 7) -> str:
+def briefing(session: SessionDep, window_days: WindowDays = 7) -> str:
     from sentinel.correlate.trending import briefing_lines, feed_drift, trending_techniques
 
     trending_list = trending_techniques(session, window_days=window_days)
     drift = feed_drift(session, window_days=window_days)
     campaigns = session.scalars(select(Campaign)).all()
-    n_kev = sum(1 for c in campaigns if _kev_overlap(session, c.cve_ids))
+    # One batched KEV lookup instead of a query per campaign.
+    all_cves = {cve for c in campaigns for cve in c.cve_ids}
+    kev_listed = (
+        set(session.scalars(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(all_cves))))
+        if all_cves
+        else set()
+    )
+    n_kev = sum(1 for c in campaigns if any(cve in kev_listed for cve in c.cve_ids))
     return "\n".join(briefing_lines(trending_list, drift, len(campaigns), n_kev))
 
 
@@ -613,16 +643,35 @@ def attack_navigator_layer(session: SessionDep) -> dict[str, Any]:
     """
     evidence: dict[str, int] = {}
 
-    def bump(technique_id: str) -> None:
-        evidence[technique_id] = evidence.get(technique_id, 0) + 1
+    def add(technique_id: str, n: int) -> None:
+        evidence[technique_id] = evidence.get(technique_id, 0) + n
 
-    for technique_id in session.scalars(select(ReportTechnique.technique_id)):
-        bump(technique_id)
-    for technique_id in session.scalars(select(CampaignTechnique.technique_id)):
-        bump(technique_id)
-    for techniques in session.scalars(select(Alert.techniques)):
-        for technique_id in techniques or []:
-            bump(technique_id)
+    # Report + campaign edges aggregate directly in SQL (indexed technique_id).
+    for tid, n in session.execute(
+        select(ReportTechnique.technique_id, func.count()).group_by(ReportTechnique.technique_id)
+    ):
+        add(tid, n)
+    for tid, n in session.execute(
+        select(CampaignTechnique.technique_id, func.count()).group_by(
+            CampaignTechnique.technique_id
+        )
+    ):
+        add(tid, n)
+    # Alert techniques are a JSON array. On Postgres, unnest + group in SQL;
+    # elsewhere (SQLite in tests) scan the arrays in Python.
+    if session.get_bind().dialect.name == "postgresql":
+        rows = session.execute(
+            text(
+                "SELECT elem, count(*) FROM alerts, "
+                "jsonb_array_elements_text(techniques) AS elem GROUP BY elem"
+            )
+        )
+        for tid, n in rows:
+            add(tid, n)
+    else:
+        for techniques in session.scalars(select(Alert.techniques)):
+            for technique_id in techniques or []:
+                add(technique_id, 1)
 
     return {
         "name": "SENTINEL technique evidence",
@@ -658,6 +707,31 @@ def list_techniques(session: SessionDep) -> list[TechniqueListItem]:
     ]
 
 
+def _alert_count_for_technique(session: Session, technique_id: str) -> int:
+    """Number of alerts whose technique list contains `technique_id`.
+
+    On Postgres this is a JSONB containment (`@>`) query backed by the GIN index
+    on `alerts.techniques` (migration 0009) — O(matches). On other dialects
+    (SQLite in tests) it falls back to scanning the JSON arrays in Python.
+    """
+    bind = session.get_bind()
+    if bind.dialect.name == "postgresql":
+        from sqlalchemy import cast
+        from sqlalchemy.dialects.postgresql import JSONB
+
+        stmt = (
+            select(func.count())
+            .select_from(Alert)
+            .where(Alert.techniques.op("@>")(cast([technique_id], JSONB)))
+        )
+        return session.scalar(stmt) or 0
+    return sum(
+        1
+        for techniques in session.scalars(select(Alert.techniques))
+        if techniques and technique_id in techniques
+    )
+
+
 @app.get("/techniques/{technique_id}")
 def technique_detail(technique_id: str, session: SessionDep) -> TechniqueDetail:
     technique = session.get(AttackTechnique, technique_id)
@@ -680,10 +754,7 @@ def technique_detail(technique_id: str, session: SessionDep) -> TechniqueDetail:
         )
         or 0
     )
-    alert_count = 0
-    for techniques in session.scalars(select(Alert.techniques)):
-        if techniques and technique_id in techniques:
-            alert_count += 1
+    alert_count = _alert_count_for_technique(session, technique_id)
 
     return TechniqueDetail(
         technique_id=technique.technique_id,

@@ -128,6 +128,12 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     parser.add_argument("--stride", type=int, default=8)
     parser.add_argument("--threshold-percentile", type=float, default=99.0)
     parser.add_argument("--group-by", choices=["host", "pair"], default="host")
+    parser.add_argument(
+        "--conformal",
+        action="store_true",
+        help="gate alerts with the online budget controller (drift-robust) "
+        "instead of the fixed benign percentile",
+    )
     parser.add_argument("--seed", type=int, default=13)
     args = parser.parse_args(argv)
 
@@ -153,16 +159,20 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
     rng = np.random.default_rng(args.seed)
     holdout_mask = rng.random(len(benign_stats)) < 0.1
     scorer = ProfileScorer().fit(benign_stats[~holdout_mask])
-    threshold = float(
-        np.percentile(scorer.score(benign_stats[holdout_mask]), args.threshold_percentile)
-    )
+    holdout_scores = scorer.score(benign_stats[holdout_mask])
+    threshold = float(np.percentile(holdout_scores, args.threshold_percentile))
 
     test_flows = flows.loc[x_test.index].reset_index(drop=True)
     test_stats, last_pos = build_window_stats(
         test_flows, args.window, args.stride, group_by_pair=pair
     )
     scores = scorer.score(test_stats)
-    alerts = scores > threshold
+    if args.conformal:
+        from sentinel.ids.conformal import budget_alerts
+
+        alerts = budget_alerts(holdout_scores, scores, args.threshold_percentile)
+    else:
+        alerts = scores > threshold
 
     window_y = y_test.to_numpy()[last_pos]
     window_labels = labels_test.to_numpy()[last_pos]
@@ -184,6 +194,7 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
                 "stride": args.stride,
                 "threshold_percentile": args.threshold_percentile,
                 "threshold": threshold,
+                "conformal": args.conformal,
                 "group_by": args.group_by,
                 "stats": ",".join(STAT_NAMES),
             }

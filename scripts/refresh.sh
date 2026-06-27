@@ -8,7 +8,7 @@
 #
 # Enable a daily run (example, 06:00) without editing this file:
 #   crontab -e
-#   0 6 * * *  /Users/jayden/Documents/sentinel/scripts/refresh.sh >> /tmp/sentinel-cron.log 2>&1
+#   0 6 * * *  /Users/jayden/code-projects/sentinel/scripts/refresh.sh >> /tmp/sentinel-cron.log 2>&1
 #
 # Requires: Postgres up (`make up`) and the `sentinel` conda env installed.
 set -euo pipefail

@@ -59,16 +59,23 @@ class HostThreat:
 
 # Transparent risk rule. Each input is bounded and named so the score is
 # explainable on the dashboard rather than a black box:
-#   detector agreement  — how many of the 5 detectors independently flagged the
-#                         host (the ensemble's strongest signal)
-#   severity            — the host's peak supervised confidence (0..1)
+#   detector agreement  — how many of the 5 *flow* detectors independently
+#                         flagged the host (the ensemble's strongest signal)
+#   severity            — the host's peak calibrated attack probability (0..1)
 #   intel fusion        — bonus scaled by the *strength* of the best campaign
 #                         correlation (specificity x recency x corroboration),
 #                         so a rare, recent, well-evidenced match lifts risk far
 #                         more than a coincidental shared tag; a further bump if
 #                         that campaign involves KEV (exploited) CVEs
+# The five flow-ensemble detectors whose agreement the bonus counts. SQLi is a
+# separate application-layer (WAF) modality — surfaced on its own in the UI — so
+# it must not substitute for a flow detector in the consensus count.
+_FLOW_DETECTORS = frozenset({"lightgbm-multiclass", "autoencoder", "sequence", "profile", "beacon"})
+# Detectors whose score is a calibrated [0, 1] attack probability, so it can
+# drive the severity term; the anomaly detectors emit unbounded recon/z-scores.
+_PROBABILITY_MODELS = frozenset({"lightgbm-multiclass", "sqli"})
 _N_DETECTORS = 5  # supervised, autoencoder, sequence, profile, beacon
-_DETECTOR_WEIGHT = 11  # per distinct detector, capped at 5 -> 55
+_DETECTOR_WEIGHT = 11  # per distinct flow detector, capped at 5 -> 55
 _SEVERITY_WEIGHT = 24
 _FUSION_BONUS = 14
 _KEV_BONUS = 6
@@ -135,12 +142,13 @@ def host_threats(session: Session, include_simulated: bool = False) -> list[Host
     for host, alerts in grouped.items():
         detectors = sorted({a.model for a in alerts})
         techniques = sorted({t for a in alerts for t in (a.techniques or [])})
-        severity = max((a.score for a in alerts if a.model == "lightgbm-multiclass"), default=0.0)
+        n_flow_detectors = len({a.model for a in alerts if a.model in _FLOW_DETECTORS})
+        severity = max((a.score for a in alerts if a.model in _PROBABILITY_MODELS), default=0.0)
         fused = _campaign_links(set(techniques), ctx)
         threats.append(
             HostThreat(
                 host=host,
-                risk=_risk(len(detectors), severity, fused),
+                risk=_risk(n_flow_detectors, severity, fused),
                 detectors=detectors,
                 techniques=techniques,
                 predicted_labels=sorted({a.predicted_label for a in alerts if a.predicted_label}),

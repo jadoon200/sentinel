@@ -27,3 +27,7 @@ frontend/dist/
 .idea/
 .vscode/
 data/cicids2018/
+
+# Local agent/editor config — keep OUT of the repo (local copies are fine)
+.claude/
+CLAUDE.md

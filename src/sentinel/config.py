@@ -95,6 +95,11 @@ class Settings(BaseSettings):
 
     http_timeout_seconds: float = 30.0
 
+    # Sibling OSINT-fusion bridge: read-only base URL of the ARGUS workbench API. When set,
+    # a cyber campaign can be enriched with the open-source picture relevant to it (ARGUS's
+    # hybrid retrieval, POST /retrieve). Empty disables it; SENTINEL only ever READS from ARGUS.
+    argus_api_url: str = ""
+
     # API hardening for a public deployment (all default to a safe local-dev
     # posture; override via SENTINEL_* env vars when the server goes live).
     # api_allowed_origins: comma-separated exact origins for the deployed

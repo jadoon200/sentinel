@@ -19,6 +19,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from sentinel.api.limits import RateLimiter
+from sentinel.bridge.argus import OsintItem, osint_context
 from sentinel.config import get_settings
 from sentinel.correlate.fusion import (
     build_fusion_context,
@@ -390,6 +391,30 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> CampaignDetail:
         age_days=campaign_ages(session).get(campaign_id),
         reports=[_report_summary(session, r) for r in reports],
     )
+
+
+@app.get("/campaigns/{campaign_id}/osint")
+def campaign_osint(
+    campaign_id: str,
+    session: SessionDep,
+    limit: int = Query(default=5, ge=1, le=20),
+) -> list[OsintItem]:
+    """Open-source context for a cyber campaign, fused read-only from the sibling ARGUS
+    workbench — the reverse of ARGUS pulling cyber evidence, closing the all-source loop.
+    The query is built from the campaign's report titles (what it is about); ARGUS returns
+    source-rated OSINT relevant to it. Empty when the bridge is off (``SENTINEL_ARGUS_API_URL``
+    unset) or ARGUS is unreachable — never breaks the route."""
+    campaign = session.get(Campaign, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    member_ids = session.scalars(
+        select(CampaignReport.report_id).where(CampaignReport.campaign_id == campaign_id)
+    ).all()
+    titles = session.scalars(
+        select(ThreatReport.title).where(ThreatReport.report_id.in_(member_ids))
+    ).all()
+    query = " ".join(t for t in titles if t) or " ".join(campaign.cve_ids)
+    return osint_context(query, limit=limit)
 
 
 @app.get("/reports")

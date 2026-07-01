@@ -114,6 +114,14 @@ def test_campaign_detail_joins_reports_and_techniques(client: TestClient) -> Non
     assert client.get("/campaigns/nope").status_code == 404
 
 
+def test_campaign_osint_off_by_default(client: TestClient) -> None:
+    # The OSINT-fusion bridge is off without SENTINEL_ARGUS_API_URL — empty, never errors.
+    response = client.get("/campaigns/camp:1/osint")
+    assert response.status_code == 200 and response.json() == []
+    # unknown campaign still 404s before reaching the bridge
+    assert client.get("/campaigns/nope/osint").status_code == 404
+
+
 def test_campaigns_list_ranks_and_carries_recency(client: TestClient) -> None:
     campaigns = client.get("/campaigns").json()
     assert len(campaigns) == 1

@@ -73,12 +73,13 @@ class ArgusBridge:
 
 
 def osint_context(query: str, settings: Settings | None = None, limit: int = 5) -> list[OsintItem]:
-    """ARGUS OSINT relevant to `query` as rated evidence, or [] when the bridge is off."""
+    """ARGUS OSINT relevant to `query` as rated evidence, or [] when the bridge is off.
+
+    Goes straight to /retrieve — no /health pre-flight. The retrieve call already
+    degrades to [] on any failure, so a pre-flight would only double the latency
+    (and the worst-case stall) of every enrichment for no extra safety.
+    """
     s = settings or get_settings()
     if not s.argus_api_url:
         return []
-    bridge = ArgusBridge(s.argus_api_url, s.http_timeout_seconds)
-    if not bridge.available():
-        log.warning("argus_bridge_unreachable", url=s.argus_api_url)
-        return []
-    return bridge.osint_context(query, limit)
+    return ArgusBridge(s.argus_api_url, s.http_timeout_seconds).osint_context(query, limit)

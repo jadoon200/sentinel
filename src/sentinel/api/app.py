@@ -396,6 +396,7 @@ def campaign_detail(campaign_id: str, session: SessionDep) -> CampaignDetail:
 @app.get("/campaigns/{campaign_id}/osint")
 def campaign_osint(
     campaign_id: str,
+    request: Request,
     session: SessionDep,
     limit: int = Query(default=5, ge=1, le=20),
 ) -> list[OsintItem]:
@@ -403,7 +404,13 @@ def campaign_osint(
     workbench — the reverse of ARGUS pulling cyber evidence, closing the all-source loop.
     The query is built from the campaign's report titles (what it is about); ARGUS returns
     source-rated OSINT relevant to it. Empty when the bridge is off (``SENTINEL_ARGUS_API_URL``
-    unset) or ARGUS is unreachable — never breaks the route."""
+    unset) or ARGUS is unreachable — never breaks the route.
+
+    Rate-limited like /map-techniques: each hit makes a blocking outbound call to
+    ARGUS, so an unthrottled public client could hold worker threads and turn
+    SENTINEL into a traffic amplifier against the sibling service."""
+    if not _rate_limiter.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail="rate limit exceeded, slow down")
     campaign = session.get(Campaign, campaign_id)
     if campaign is None:
         raise HTTPException(status_code=404, detail="campaign not found")

@@ -67,7 +67,8 @@ function DetectionLine({ alert }: { alert: AlertRef }) {
       </button>
       {open && (
         <div className="det-ctx">
-          {!ctx.data && <span className="hint">checking intel…</span>}
+          {ctx.isError && <span className="hint">intel lookup failed — is the API running?</span>}
+          {!ctx.data && !ctx.isError && <span className="hint">checking intel…</span>}
           {ctx.data && ctx.data.matched_campaigns.length === 0 && (
             <span className="hint">no campaign correlation for this detection</span>
           )}

@@ -61,3 +61,18 @@ def test_fetch_otx_pulses_follows_pagination() -> None:
 def test_fetch_otx_pulses_requires_key() -> None:
     with pytest.raises(ValueError, match="OTX API key"):
         fetch_otx_pulses()
+
+
+@respx.mock
+def test_fetch_otx_pulses_tolerates_malformed_created_date() -> None:
+    # One bad pulse timestamp must not kill the whole ingest run.
+    page = {
+        "results": [{"id": "c" * 24, "name": "bad date", "created": "not-a-date"}],
+        "next": None,
+    }
+    respx.get(get_settings().otx_api_url).mock(return_value=Response(200, json=page))
+
+    reports = fetch_otx_pulses(api_key="test-key")
+
+    assert len(reports) == 1
+    assert reports[0].published is None

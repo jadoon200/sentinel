@@ -105,6 +105,7 @@ function CampaignRow({ c }: { c: CampaignSummary }) {
 
 function Briefing() {
   const briefing = useQuery({ queryKey: ["briefing"], queryFn: api.briefing });
+  if (briefing.isError) return <div className="muted">briefing unavailable — is the API running?</div>;
   if (!briefing.data) return <div className="muted">generating…</div>;
   return <pre className="briefing">{briefing.data}</pre>;
 }

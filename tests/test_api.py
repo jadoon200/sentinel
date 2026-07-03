@@ -122,6 +122,18 @@ def test_campaign_osint_off_by_default(client: TestClient) -> None:
     assert client.get("/campaigns/nope/osint").status_code == 404
 
 
+def test_campaign_osint_rate_limited(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The route makes a blocking outbound call to ARGUS per hit, so it shares the
+    # same per-client rate limit as the inference route.
+    from sentinel.api import app as api_app
+    from sentinel.api.limits import RateLimiter
+
+    monkeypatch.setattr(api_app, "_rate_limiter", RateLimiter(max_requests=1, window_seconds=60))
+
+    assert client.get("/campaigns/camp:1/osint").status_code == 200
+    assert client.get("/campaigns/camp:1/osint").status_code == 429
+
+
 def test_campaigns_list_ranks_and_carries_recency(client: TestClient) -> None:
     campaigns = client.get("/campaigns").json()
     assert len(campaigns) == 1

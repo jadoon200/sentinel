@@ -13,7 +13,10 @@ from sentinel.db.models import ThreatReport
 def _parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    parsed = datetime.fromisoformat(value)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:  # one malformed pulse date must not kill the whole ingest
+        return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 

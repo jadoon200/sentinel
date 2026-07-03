@@ -164,6 +164,7 @@ export const api = {
   drift: () => get<DriftOut>("/feed-drift"),
   briefing: async () => {
     const res = await fetch(`${BASE}/briefing`);
+    if (!res.ok) throw new Error(`/briefing: ${res.status}`);
     return res.text();
   },
 };

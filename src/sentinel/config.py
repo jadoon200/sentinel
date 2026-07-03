@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,7 +79,8 @@ class Settings(BaseSettings):
     # Fusion scoring: half-life (days) of the recency decay applied to a matched
     # campaign's age — a 30-day-old correlation scores half a fresh one. Governs
     # the recency factor in the alert↔campaign fusion strength (correlate/fusion.py).
-    fusion_recency_half_life_days: float = 30.0
+    # Must be positive: the recency factor divides by it.
+    fusion_recency_half_life_days: float = Field(default=30.0, gt=0)
 
     # Application-layer SQLi detector: free public payload corpora, cached here
     # (gitignored). Two independent sources enable the cross-corpus honesty eval.

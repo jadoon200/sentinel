@@ -55,7 +55,7 @@ def test_bridge_maps_argus_retrieve_to_rated_osint() -> None:
 
 @respx.mock
 def test_osint_context_end_to_end() -> None:
-    respx.get("http://argus.test/health").mock(return_value=httpx.Response(200, json={}))
+    # No /health pre-flight: retrieval is a single round-trip.
     respx.post("http://argus.test/retrieve").mock(return_value=httpx.Response(200, json=_OSINT))
     items = osint_context("q", _settings(argus_api_url="http://argus.test"))
     assert [i.doc_id for i in items] == ["reuters.com:1"]
@@ -63,5 +63,11 @@ def test_osint_context_end_to_end() -> None:
 
 @respx.mock
 def test_osint_context_empty_when_unreachable() -> None:
-    respx.get("http://argus.test/health").mock(return_value=httpx.Response(503))
+    respx.post("http://argus.test/retrieve").mock(side_effect=httpx.ConnectError("down"))
+    assert osint_context("q", _settings(argus_api_url="http://argus.test")) == []
+
+
+@respx.mock
+def test_osint_context_empty_on_error_response() -> None:
+    respx.post("http://argus.test/retrieve").mock(return_value=httpx.Response(503))
     assert osint_context("q", _settings(argus_api_url="http://argus.test")) == []

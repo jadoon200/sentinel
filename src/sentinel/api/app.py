@@ -872,3 +872,14 @@ def map_techniques(req: MapRequest, request: Request, session: SessionDep) -> li
             )
         )
     return results
+
+
+# Serve the built React dashboard from the API's own origin when a dist dir is
+# configured (the single-service cloud image). Mounted last so every API route
+# above takes precedence; the SPA and its assets are served for everything else,
+# so the dashboard and API share a host and need no CORS or second service.
+# Empty in dev/tests, where the Vite dev server runs separately.
+if _settings.api_dashboard_dist:
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=_settings.api_dashboard_dist, html=True), name="dashboard")

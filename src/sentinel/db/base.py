@@ -12,7 +12,12 @@ class Base(DeclarativeBase):
 
 
 def make_engine(url: str | None = None):  # type: ignore[no-untyped-def]
-    return create_engine(url or get_settings().database_url, pool_pre_ping=True)
+    resolved = url or get_settings().database_url
+    # A file-based SQLite DB (the read-only seed shipped in the deploy image) is
+    # opened from FastAPI's threadpool, so allow cross-thread connection reuse;
+    # a no-op for the Postgres path used everywhere else.
+    connect_args = {"check_same_thread": False} if resolved.startswith("sqlite") else {}
+    return create_engine(resolved, pool_pre_ping=True, connect_args=connect_args)
 
 
 _session_factory: sessionmaker[Session] | None = None

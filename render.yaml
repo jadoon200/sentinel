@@ -1,0 +1,13 @@
+# Render Blueprint — one free web service that serves the SENTINEL dashboard and
+# its read-only API from a single container (SQLite seed baked in, no database
+# service needed). Import via Render: New > Blueprint > pick this repo.
+# See docs/DEPLOY.md ("Deploy to the cloud") for the full walkthrough.
+services:
+  - type: web
+    name: sentinel
+    runtime: docker
+    plan: free
+    region: singapore # closest to the DIS/Singapore audience; change if you like
+    dockerfilePath: ./Dockerfile.deploy
+    healthCheckPath: /health
+    autoDeploy: true

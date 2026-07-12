@@ -209,9 +209,11 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     prof_scores = prof_scorer.score(prof_test_stats)
     dominant = prof_scorer.dominant_stat(prof_test_stats)
     # Profile scores are one-sided (excess fan-out), so the budget controller
-    # applies here too. Sequence (two-sided: also alerts suspiciously-low error)
-    # and beacon (a static per-channel set, not a time-ordered stream) keep the
-    # fixed percentile — the controller's rate/drift model doesn't fit them.
+    # applies here too. The sequence detector is two-sided in its standalone form
+    # (it also flags suspiciously-low error), and beacon is a static per-channel
+    # set, not a time-ordered stream — so both keep the fixed percentile, since the
+    # one-sided controller's rate/drift model doesn't fit them. (This replay path
+    # persists the high-error side, the web-attack signal — see docs/EVAL.md.)
     if args.conformal:
         from sentinel.ids.conformal import budget_alerts
 

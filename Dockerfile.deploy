@@ -25,8 +25,14 @@ RUN pip install --no-cache-dir --no-deps .
 COPY --from=dashboard /fe/dist ./frontend_dist
 
 # Read-only seed graph (ingest -> enrich -> replay), published as a GitHub Release
-# asset so it stays out of git. Bump the tag when the seed is regenerated.
-ADD https://github.com/jadoon200/sentinel/releases/download/seed-v1/sentinel-seed.db /app/data/sentinel-seed.db
+# asset so it stays out of git. Fetch with Python — it follows the release's 302
+# redirect to the signed asset URL, which Docker's ADD does not reliably do (ADD
+# would save the empty redirect body, leaving an invalid DB and a health-check
+# hang). Assert the result is a real SQLite file so a bad fetch fails the *build*
+# loudly instead of a silent runtime 503. Bump the tag when the seed is regenerated.
+RUN mkdir -p /app/data && \
+    python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/jadoon200/sentinel/releases/download/seed-v1/sentinel-seed.db', '/app/data/sentinel-seed.db')" && \
+    python -c "import sys; sys.exit('seed is not a valid SQLite DB' if open('/app/data/sentinel-seed.db','rb').read(16) != b'SQLite format 3\x00' else 0)"
 
 ENV SENTINEL_DATABASE_URL=sqlite:////app/data/sentinel-seed.db \
     SENTINEL_API_DASHBOARD_DIST=/app/frontend_dist

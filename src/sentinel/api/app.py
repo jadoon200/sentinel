@@ -825,11 +825,17 @@ def map_techniques(req: MapRequest, request: Request, session: SessionDep) -> li
     cap on the model so load sheds as 503 instead of exhausting memory, and a
     503 (not a 500 stack trace) if the model can't be loaded.
     """
-    from sentinel.nlp.mapper import aggregate_matches
-    from sentinel.nlp.tagging import split_sentences
-
     if not _rate_limiter.allow(_client_key(request)):
         raise HTTPException(status_code=429, detail="rate limit exceeded, slow down")
+
+    # The NLP stack (numpy/sentence-transformers/…) is absent from the slim deploy
+    # image on purpose, so importing the mapper fails there — degrade to 503 rather
+    # than a 500, same as a model-load failure below.
+    try:
+        from sentinel.nlp.mapper import aggregate_matches
+        from sentinel.nlp.tagging import split_sentences
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="technique mapper unavailable") from exc
 
     sentences = split_sentences(req.text)
     if not sentences:

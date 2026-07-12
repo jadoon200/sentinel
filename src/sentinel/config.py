@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     # Warm the technique mapper in a background thread at startup so the first
     # public request doesn't pay the ~20s model load (off in dev/tests).
     api_warm_model: bool = False
+    # Directory of the built React dashboard to serve from the API's own origin
+    # (the single-service cloud image sets this to the baked-in dist). Empty in
+    # dev/tests, where the Vite dev server runs separately; when set, the SPA and
+    # API share a host so no CORS or second service is needed.
+    api_dashboard_dist: str = ""
 
 
 @lru_cache

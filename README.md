@@ -193,3 +193,8 @@ and a bounded-concurrency cap that sheds load as `503` rather than exhausting
 memory — all local-safe by default and tuned via `SENTINEL_API_*` env vars. See
 [docs/DEPLOY.md](docs/DEPLOY.md) for the env vars and the reverse-proxy / TLS /
 sizing steps to do at deploy time.
+
+For a **zero-cost demo**, `render.yaml` + `Dockerfile.deploy` ship the dashboard
+and read-only API as a single free container with the graph baked in as a SQLite
+seed (no managed database) — see
+[docs/DEPLOY.md § Deploy to the cloud](docs/DEPLOY.md#deploy-to-the-cloud-free-one-service).

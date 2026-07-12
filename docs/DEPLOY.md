@@ -57,3 +57,57 @@ SENTINEL_API_TRUST_FORWARDED_HEADER=true  # behind a trusted proxy that sets X-F
 # SENTINEL_API_RATE_LIMIT_REQUESTS=10
 # SENTINEL_API_INFERENCE_CONCURRENCY=1
 ```
+
+## Deploy to the cloud (free, one service)
+
+The section above is the full public-hardening story (rate limits, TLS, sizing).
+For a **zero-cost portfolio demo** there's a much smaller path: one container that
+serves the dashboard *and* the read-only API, with the graph baked in as a SQLite
+file — no managed Postgres, no second service, no CORS.
+
+**How it fits together**
+
+- `Dockerfile.deploy` — multi-stage: builds the React dashboard, installs the
+  slim API (`requirements-api.txt`, no ML stack), copies the built dashboard in,
+  and pulls the seed DB. The API serves the SPA from its own origin
+  (`SENTINEL_API_DASHBOARD_DIST`) and reads the graph from the bundled SQLite
+  (`SENTINEL_DATABASE_URL=sqlite:///…`). It binds to `$PORT`.
+- `render.yaml` — a Render Blueprint declaring that one free web service.
+- The seed is a **read-only snapshot**, published as a GitHub Release asset (kept
+  out of git) and fetched at image-build time.
+
+Because the deploy image is the *slim* API, the live **“Try the mapper” panel
+returns 503 by design** (SecureBERT isn't installed) — everything else (feed,
+landscape, briefing, Navigator export) is fully served.
+
+**1. Generate + publish the seed** (needs the full env + `data/cicids2017/`):
+
+```bash
+python scripts/generate_seed.py --out data/sentinel-seed.db
+gh release create seed-v1 data/sentinel-seed.db \
+  --title "Dashboard seed v1" --notes "Read-only graph snapshot for the cloud demo"
+```
+
+Regenerating later (more feeds accumulated, or an OTX key set for richer
+campaigns): rerun the script, publish under a **new tag** (`seed-v2`, …), and bump
+the `ADD …/seed-v?/…` URL in `Dockerfile.deploy` so the image cache invalidates.
+
+**2. Deploy on Render**
+
+1. Push this repo to GitHub (public, so the image build can fetch the release asset).
+2. Render → **New → Blueprint** → pick the repo. It reads `render.yaml` and
+   creates the `sentinel` web service on the **free** plan.
+3. First build takes a few minutes (npm build + pip install + seed fetch). When
+   it's live, the dashboard is at `https://sentinel-XXXX.onrender.com`.
+
+**3. Notes**
+
+- **Cold starts.** Free Render web services sleep after ~15 min idle; the first
+  hit then waits ~30–60 s. To keep it warm, point a free uptime monitor
+  (e.g. UptimeRobot) at `/health` every 10 min — one always-pinged free service
+  fits inside the monthly free hours.
+- **Region.** `render.yaml` defaults to `singapore` (closest to the DIS audience);
+  change it if you prefer.
+- **Refreshing data.** The seed is a point-in-time snapshot. Regenerate and bump
+  the tag whenever you want the demo to reflect newer intel.
+

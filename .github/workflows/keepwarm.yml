@@ -1,0 +1,24 @@
+name: keep-warm
+
+# Keep the free Render deployment warm so it doesn't cold-start for visitors.
+# Render free web services sleep after ~15 min idle (~30-60s wake on the next
+# hit). This pings /health every ~10 min during SGT daytime/evening
+# (00:00-15:00 UTC = 08:00-23:00 SGT) — warm when people are likely to look,
+# asleep overnight to stay well under Render's 750 free instance-hours/month.
+# Scheduled workflows only run from the default branch. Public repo => Actions
+# minutes are free. To turn it off: delete this file or disable it in the
+# Actions tab. Override the target with a RENDER_URL repo variable if the URL
+# ever changes.
+on:
+  schedule:
+    - cron: "*/10 0-15 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health (retries cover a cold wake-up)
+        run: |
+          URL="${{ vars.RENDER_URL || 'https://sentinel-92pf.onrender.com' }}"
+          curl -fsS --max-time 60 --retry 4 --retry-all-errors --retry-delay 20 "$URL/health"

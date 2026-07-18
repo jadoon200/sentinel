@@ -108,6 +108,12 @@ the `ADD …/seed-v?/…` URL in `Dockerfile.deploy` so the image cache invalida
   fits inside the monthly free hours.
 - **Region.** `render.yaml` defaults to `singapore` (closest to the DIS audience);
   change it if you prefer.
+- **Rate limiting behind Render's proxy.** The container only ever sees Render's
+  load balancer as the TCP peer, so without `SENTINEL_API_TRUST_FORWARDED_HEADER`
+  every visitor would share one rate-limit bucket (one busy client could 429
+  everyone). `render.yaml` therefore sets it to `true` — safe here because
+  Render's edge controls `X-Forwarded-For`; only flip it off if you move the
+  image somewhere that exposes it directly to clients.
 - **Refreshing data.** The seed is a point-in-time snapshot. Regenerate and bump
   the tag whenever you want the demo to reflect newer intel.
 

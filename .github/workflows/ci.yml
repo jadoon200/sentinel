@@ -66,6 +66,11 @@ jobs:
         run: npm run lint
       - name: Build (tsc + vite)
         run: npm run build
+      # The dashboard's ti-* icons come from the Tabler webfont; if its CSS ever
+      # falls out of the bundle again, every icon silently renders as empty space
+      # (shipped that way once) - so make its absence a hard CI failure.
+      - name: Icon font present in bundle
+        run: grep -rlq "tabler-icons" dist/assets/*.css && ls dist/assets/tabler-icons-*.woff2
 
   # Exercises the MLX backends (anomaly_mlx, sequence) that Linux can't import.
   macos-mlx:

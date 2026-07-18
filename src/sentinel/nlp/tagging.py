@@ -39,6 +39,10 @@ def tag_report(
     aggregated = aggregate_matches(
         mapper.map_text(sentence, top_k=top_k_per_sentence) for sentence in sentences
     )
+    # Floor first, then cap: aggregation ranks by (corroborations, score), so a
+    # high-scoring single-corroboration technique can sit below floor-failing
+    # entries — slicing first would spend the budget on matches the floor discards.
+    qualified = [match for match in aggregated if match.score >= min_score]
     return [
         ReportTechnique(
             report_id=report.report_id,
@@ -47,8 +51,7 @@ def tag_report(
             corroborations=match.corroborations,
             method=method,
         )
-        for match in aggregated[:max_techniques]
-        if match.score >= min_score
+        for match in qualified[:max_techniques]
     ]
 
 

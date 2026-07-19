@@ -39,7 +39,11 @@ function MapperTryIt() {
       </div>
       {map.error && (
         <p className="error" style={{ padding: "6px 0" }}>
-          mapper unavailable — is the API (`make api`) running?
+          {(map.error as Error).message.includes("503")
+            ? "The live mapper isn't available on this deployment — the slim demo image doesn't " +
+              "ship the SecureBERT model (a deliberate free-tier trade-off, not an outage). Run " +
+              "SENTINEL locally to try the mapper on your own text."
+            : "mapper unreachable — is the API (`make api`) running?"}
         </p>
       )}
       {map.data && map.data.length === 0 && (
@@ -161,6 +165,13 @@ export function ReportCard() {
           Even Bot — where the blind 2017 model ranks <i>worse than a coin flip</i> (AUC 0.40) — is
           recovered to AUC 0.997. Cross-network transfer is a <i>few-shot</i> problem: the
           unsupervised detectors surface candidates, an analyst confirms ~50, the model adapts.
+        </p>
+        <p className="muted" style={{ marginBottom: 8 }}>
+          Why brute-force hits a suspicious-looking 1.00: audited — the score survives full
+          content-level dedup (so it isn't split leakage), but the family is intrinsically
+          ~one-feature separable in-domain (a decision stump on just the 50 labels reaches AUC
+          0.997). Read DoS 0.96 / Bot 0.99 as the representative few-shot numbers; details in
+          docs/EVAL.md.
         </p>
         <p className="muted" style={{ marginBottom: 0 }}>
           And the budget is small (measured, 5 seeds): <b>~50 labels reach ≥0.88 recall, ~100 reach

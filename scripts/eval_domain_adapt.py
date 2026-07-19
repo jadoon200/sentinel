@@ -54,20 +54,23 @@ def main() -> None:
 
     x17, x18, y17, y18, _ = shared_feature_xy(src, tgt)
     y17a, y18a = y17.to_numpy(), y18.to_numpy()
-    median18 = np.nanmedian(x18.to_numpy(dtype=float), axis=0)
-
-    def fill(frame: pd.DataFrame) -> np.ndarray:
-        v = frame.to_numpy(dtype=float)
-        return np.where(np.isnan(v), median18, v)
 
     # Disjoint 2018 split: every method is graded on the held-out TEST set; the
     # POOL supplies few-shot labels, alignment/AE corpus, and threshold
     # calibration. No flow appears in both — the few-shot model never sees a
     # test flow, so its score is honest (this is what the first pass got wrong).
-    target_all = fill(x18)
     pool_idx, test_idx = train_test_split(
         np.arange(len(x18)), test_size=0.6, random_state=args.seed, stratify=y18a
     )
+    # NaN-fill medians from the POOL only: a whole-day median leaks test-set
+    # statistics pre-split (audited 2026-07: no material effect, but zero is better).
+    median18 = np.nanmedian(x18.iloc[pool_idx].to_numpy(dtype=float), axis=0)
+
+    def fill(frame: pd.DataFrame) -> np.ndarray:
+        v = frame.to_numpy(dtype=float)
+        return np.where(np.isnan(v), median18, v)
+
+    target_all = fill(x18)
     x_test, y_test = target_all[test_idx], y18a[test_idx]
     pool_benign = pool_idx[y18a[pool_idx] == 0]
     cal_benign = target_all[pool_benign[: len(pool_benign) // 2]]

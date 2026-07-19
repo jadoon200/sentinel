@@ -39,7 +39,11 @@ function MapperTryIt() {
       </div>
       {map.error && (
         <p className="error" style={{ padding: "6px 0" }}>
-          mapper unavailable — is the API (`make api`) running?
+          {(map.error as Error).message.includes("503")
+            ? "The live mapper isn't available on this deployment — the slim demo image doesn't " +
+              "ship the SecureBERT model (a deliberate free-tier trade-off, not an outage). Run " +
+              "SENTINEL locally to try the mapper on your own text."
+            : "mapper unreachable — is the API (`make api`) running?"}
         </p>
       )}
       {map.data && map.data.length === 0 && (

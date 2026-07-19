@@ -96,7 +96,7 @@ const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
   ["CORAL covariance alignment", "0.000", "0.56", "bad"],
   ["transfer-stable features", "0.000", "0.01", "bad"],
   ["target-trained autoencoder", "0.000", "0.81", "mid"],
-  ["few-shot: +50 labelled flows", "1.000", "1.00", "good"],
+  ["few-shot: +50 labelled flows", "0.99997", "0.99994", "good"],
 ];
 
 // SQLi payload detector — F1, within-corpus vs cross-corpus (the honest test).
@@ -150,7 +150,7 @@ export function ReportCard() {
           {[
             ["DoS", "0.05", "0.96"],
             ["Bot", "0.00", "0.99"],
-            ["Brute-force", "0.00", "1.00"],
+            ["Brute-force", "0.00", "0.99996"],
           ].map(([fam, before, after]) => (
             <div key={fam} className="xfam-row">
               <span className="xfam-name">{fam}</span>
@@ -167,7 +167,8 @@ export function ReportCard() {
           unsupervised detectors surface candidates, an analyst confirms ~50, the model adapts.
         </p>
         <p className="muted" style={{ marginBottom: 8 }}>
-          Why brute-force hits a suspicious-looking 1.00: audited — the score survives full
+          Why brute-force looks perfect: it is not literally 1.0 — the exact score is 0.99997 (7 of
+          228,569 held-out attacks missed). Audited — the score survives full
           content-level dedup (so it isn't split leakage), but the family is intrinsically
           ~one-feature separable in-domain (a decision stump on just the 50 labels reaches AUC
           0.997). Read DoS 0.96 / Bot 0.99 as the representative few-shot numbers; details in

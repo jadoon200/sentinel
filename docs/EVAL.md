@@ -564,7 +564,7 @@ Recall at a target-benign-calibrated 1% FPR, 2017 -> 2018:
 | CORAL covariance alignment | 0.000 | 0.500 | collapsed ranking to chance |
 | transfer-stable features | 0.000 | 0.343 | pruning hurt — inverted |
 | target-trained autoencoder | 0.000 | 0.827 | ranks better, can't separate |
-| **few-shot: +50 labelled 2018 flows** | **1.000** | **1.000** | recovers perfect detection |
+| **few-shot: +50 labelled 2018 flows** | **0.99997** | **0.99994** | recovers near-perfect detection |
 
 Methodology note (this matters): the few-shot labels and the test set are a
 **disjoint split of the 2018 day** — the model is graded only on flows it
@@ -581,8 +581,9 @@ the 1.000 was re-audited beyond the index-disjoint split:
   examples** — scripted FTP/SSH logins repeat). An index-disjoint split does
   not neutralize that on its own. Re-scoring after removing every test row
   that exact-duplicates a few-shot row — and, stricter, after dropping all
-  duplicates dataset-wide — leaves recall/AUC **unchanged at 1.000/1.000**.
-  The score is not duplication leakage.
+  duplicates dataset-wide — leaves recall/AUC **unchanged to three decimals**
+  (headline exact values: recall 0.99997, AUC 0.99994). The score is not
+  duplication leakage.
 - **Triviality probe (the honest explanation):** a **depth-1 decision stump**
   trained on only the 50 few-shot rows reaches **AUC 0.997 / recall 1.000**
   on the deduplicated test set, splitting on a single feature
@@ -602,7 +603,10 @@ The label-free methods *failed*: CORAL alignment washed out the small
 brute-force signal (AUC 0.56), transfer-stable feature selection removed the
 discriminative features (AUC 0.01), and the target-trained autoencoder ranked
 better (0.81) but could not clear a usable operating point. Only **few-shot**
-worked — 50 labelled target flows recover perfect recall on held-out traffic.
+worked — 50 labelled target flows recover 0.99997 recall on held-out traffic
+(exact, unrounded: 228,562 of 228,569 attacks alerted, 7 missed; AUC 0.9999436 —
+earlier drafts printed these at 3 dp as "1.000", which oversold a near-perfect
+score as a perfect one).
 
 Why so clean? Not overfitting: FTP/SSH brute-force is intrinsically separable
 *once the model has in-domain labels*. The 2017->2018 failure is a
@@ -622,9 +626,13 @@ target-calibrated 1% FPR:
 
 | Family | baseline (2017) | target autoencoder | few-shot 50 | few-shot 500 |
 |---|---|---|---|---|
-| brute-force | 0.000 (AUC .98) | 0.000 (AUC .67) | **1.000** | 1.000 |
+| brute-force | 0.000 (AUC .98) | 0.000 (AUC .67) | **0.99996** | 1.000 |
 | DoS | 0.047 (AUC .85) | 0.001 (AUC .84) | **0.955** | 0.995 |
 | Bot | 0.000 (AUC **.40**) | 0.000 (AUC .03) | **0.986** | 0.990 |
+
+(Brute-force few-shot-50 exact, unrounded: recall 0.9999556 — 44,998 of 45,000
+sampled attacks alerted, 2 missed; AUC 0.9999125. Cells are 3-dp rounded;
+scores that round to 1.000 are near-perfect, not literally perfect.)
 
 Two results, both kept honest:
 

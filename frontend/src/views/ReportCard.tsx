@@ -166,6 +166,13 @@ export function ReportCard() {
           recovered to AUC 0.997. Cross-network transfer is a <i>few-shot</i> problem: the
           unsupervised detectors surface candidates, an analyst confirms ~50, the model adapts.
         </p>
+        <p className="muted" style={{ marginBottom: 8 }}>
+          Why brute-force hits a suspicious-looking 1.00: audited — the score survives full
+          content-level dedup (so it isn't split leakage), but the family is intrinsically
+          ~one-feature separable in-domain (a decision stump on just the 50 labels reaches AUC
+          0.997). Read DoS 0.96 / Bot 0.99 as the representative few-shot numbers; details in
+          docs/EVAL.md.
+        </p>
         <p className="muted" style={{ marginBottom: 0 }}>
           And the budget is small (measured, 5 seeds): <b>~50 labels reach ≥0.88 recall, ~100 reach
           ≥0.97</b>. We also tried <i>active</i> learning — labelling the flows the blind model is

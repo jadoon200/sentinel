@@ -572,6 +572,32 @@ never saw, and the few-shot labels are drawn from a separate pool. An earlier
 pass tested on flows that overlapped the few-shot set; the 1.000 survived
 removing that contamination, so it is real, not leakage.
 
+**Post-hoc leakage audit (2026-07)** — a "perfect score" earns hostility, so
+the 1.000 was re-audited beyond the index-disjoint split:
+
+- **Content-level dedup:** CIC-IDS2018's brute-force day is heavily
+  self-similar (only 57% of rows are unique feature vectors; **70% of attack
+  test rows are byte-identical duplicates of one of the 25 few-shot attack
+  examples** — scripted FTP/SSH logins repeat). An index-disjoint split does
+  not neutralize that on its own. Re-scoring after removing every test row
+  that exact-duplicates a few-shot row — and, stricter, after dropping all
+  duplicates dataset-wide — leaves recall/AUC **unchanged at 1.000/1.000**.
+  The score is not duplication leakage.
+- **Triviality probe (the honest explanation):** a **depth-1 decision stump**
+  trained on only the 50 few-shot rows reaches **AUC 0.997 / recall 1.000**
+  on the deduplicated test set, splitting on a single feature
+  (`Fwd Seg Size Min > 26`). Brute-force is intrinsically ~one-feature
+  separable in-domain; the 2017 model fails only because that feature's scale
+  shifts across networks. Read the 1.000 as "a few in-domain labels re-anchor
+  a trivially separable boundary", **not** as a general few-shot capability.
+  The representative few-shot numbers are DoS 0.955 and Bot ~0.99, whose test
+  sets share almost none of brute-force's duplication artifact (0% / 4.7%
+  attack-row overlap with the few-shot pool).
+- **Minor pre-split leak, fixed:** NaN-fill medians were computed over the
+  whole 2018 day (pool + test) before splitting. One scalar per feature over
+  ~1M rows — no material effect (numbers reproduce identically) — but both
+  eval scripts now compute fill medians from the pool only.
+
 The label-free methods *failed*: CORAL alignment washed out the small
 brute-force signal (AUC 0.56), transfer-stable feature selection removed the
 discriminative features (AUC 0.01), and the target-trained autoencoder ranked

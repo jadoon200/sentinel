@@ -11,3 +11,9 @@ services:
     dockerfilePath: ./Dockerfile.deploy
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      # Render's edge proxy terminates every connection, so the container only ever
+      # sees the load balancer as the TCP peer — without this, all visitors share
+      # one rate-limit bucket. Render controls X-Forwarded-For, so it is safe to trust.
+      - key: SENTINEL_API_TRUST_FORWARDED_HEADER
+        value: "true"

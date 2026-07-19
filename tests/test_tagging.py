@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from sentinel.db.base import Base
 from sentinel.db.models import AttackTechnique, ReportTechnique, ThreatReport
-from sentinel.nlp.mapper import TechniqueMapper, load_technique_docs
-from sentinel.nlp.tagging import split_sentences, tag_untagged_reports
+from sentinel.nlp.mapper import TechniqueMapper, TechniqueMatch, load_technique_docs
+from sentinel.nlp.tagging import split_sentences, tag_report, tag_untagged_reports
 
 VOCAB = ["powershell", "phishing", "registry"]
 
@@ -33,6 +33,36 @@ def test_split_sentences_filters_short_fragments() -> None:
         "The actor used powershell to stage payloads!",
         "What data was exfiltrated overnight?",
     ]
+
+
+class StubMapper:
+    """Returns canned per-sentence matches, bypassing the encoder entirely."""
+
+    def __init__(self, per_sentence: list[list[TechniqueMatch]]) -> None:
+        self._per_sentence = per_sentence
+        self._i = 0
+
+    def map_text(self, text: str, top_k: int = 5) -> list[TechniqueMatch]:
+        matches = self._per_sentence[self._i % len(self._per_sentence)]
+        self._i += 1
+        return matches
+
+
+def test_tag_report_applies_score_floor_before_technique_cap() -> None:
+    # Aggregation ranks by (corroborations, score): a twice-corroborated but
+    # floor-failing technique outranks a strong single-sentence one. The cap must
+    # not be spent on matches the floor then discards.
+    weak = TechniqueMatch(technique_id="T1112", name="Modify Registry", score=0.2)
+    strong = TechniqueMatch(technique_id="T1566", name="Phishing", score=0.9)
+    report = ThreatReport(
+        report_id="rss:floor",
+        source="rss",
+        title="The actor modified registry keys on many hosts",
+        summary="Staff also received targeted phishing emails from the operators.",
+    )
+    mapper = StubMapper([[weak, strong], [weak]])
+    edges = tag_report(report, mapper, method="test", min_score=0.35, max_techniques=1)  # type: ignore[arg-type]
+    assert [e.technique_id for e in edges] == ["T1566"]
 
 
 def test_tag_untagged_reports_persists_corroborated_edges() -> None:

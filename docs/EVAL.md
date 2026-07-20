@@ -693,28 +693,69 @@ network, an analyst confirms ~50, and the supervised model adapts to near-
 perfect recall. A handful of labels goes remarkably far. Together they are the project's thesis: *report the number that
 survives a network change, and build the mechanism that makes it survivable.*
 
-### Label efficiency — how few, and does active learning help? (`scripts/eval_label_efficiency.py`)
+### Label efficiency and selection — what is deployable? (`scripts/eval_label_efficiency.py`)
 
-Two follow-ups to "50 labels works": the full budget curve, and whether *active*
-(uncertainty) selection beats random. Both multi-seed (5 seeds), recall @1% FPR,
-disjoint label-pool/test split.
+The full study compares six selectors across three families, five budgets, and
+five seeds. Values are mean ± standard deviation recall at a target-benign-
+calibrated 1% FPR; the label pool and test split are disjoint.
 
-| Family | baseline | N=10 | N=25 | N=50 | N=100 | N=200 |
-|---|---|---|---|---|---|---|
-| brute-force | 0.000 | 0.79 | 0.92 | 0.80 ±.40 | **1.00** | 0.95 |
-| DoS | 0.000 | 0.57 | 0.25 | 0.91 | 0.84 | **0.97** |
-| Bot | 0.000 | 0.39 | 0.69 | 0.88 | **0.97** | 0.95 |
+- **Balanced random (oracle)** deliberately draws half attack and half benign
+  using hidden ground-truth labels. It preserves the earlier controlled budget
+  curve, but an operator cannot deploy it before asking for the labels.
+- **Random-blind** samples uniformly from the unlabelled pool and is the honest
+  deployable random control. Active uses the collapsed source model's
+  uncertainty; coreset and cluster use feature geometry; stratified covers ten
+  deciles of the blind model's score range.
 
-*(random balanced selection, mean over 5 seeds)*
+#### Brute-force
 
-- **The budget is small: ~50 labels reach ≥0.88, ~100 reach ≥0.97** across all
-  three families. Budgets of 10–25 are viable but high-variance (brute-force at
-  N=50 spans 0.4–1.0 across seeds, hence 0.80 ±0.40) — multi-seed is why that
-  honesty is visible rather than a lucky single run.
-- **Active learning *underperforms* random here.** Uncertainty sampling — label
-  the target flows the blind 2017 model is least sure about — lands at ≤0.75
-  (brute-force), ~0–0.38 (DoS), and ~0 (Bot), well below random at every budget.
-  The reason is exactly the cross-network collapse: a transfer-broken source
-  model's confidence is meaningless on the new distribution, so "most uncertain"
-  selects uninformative flows. **Random balanced sampling is the robust choice**
-  — the simpler method wins, and now that's measured, not assumed.
+| N | balanced random (oracle) | random-blind | active | coreset | cluster | stratified |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 0.788 ± 0.076 | 0.798 ± 0.186 | 0.603 ± 0.301 | 0.600 ± 0.300 | 0.801 ± 0.099 | 0.997 ± 0.004 |
+| 25 | 0.619 ± 0.460 | 0.949 ± 0.099 | 0.650 ± 0.339 | 0.300 ± 0.368 | 0.957 ± 0.076 | 0.931 ± 0.101 |
+| 50 | 0.938 ± 0.123 | 0.992 ± 0.015 | 0.604 ± 0.302 | 0.463 ± 0.352 | 0.748 ± 0.387 | 0.900 ± 0.122 |
+| 100 | 1.000 ± 0.000 | 0.898 ± 0.203 | 0.751 ± 0.001 | 0.173 ± 0.292 | 0.998 ± 0.004 | 0.885 ± 0.229 |
+| 200 | 0.943 ± 0.114 | 0.964 ± 0.072 | 0.450 ± 0.367 | 0.650 ± 0.339 | 1.000 ± 0.000 | 0.950 ± 0.100 |
+
+#### DoS
+
+| N | balanced random (oracle) | random-blind | active | coreset | cluster | stratified |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 0.571 ± 0.211 | 0.539 ± 0.184 | 0.213 ± 0.234 | 0.560 ± 0.073 | 0.478 ± 0.172 | 0.556 ± 0.148 |
+| 25 | 0.510 ± 0.298 | 0.791 ± 0.059 | 0.286 ± 0.245 | 0.570 ± 0.262 | 0.731 ± 0.366 | 0.534 ± 0.290 |
+| 50 | 0.891 ± 0.083 | 0.843 ± 0.109 | 0.169 ± 0.252 | 0.688 ± 0.006 | 0.863 ± 0.092 | 0.921 ± 0.100 |
+| 100 | 0.932 ± 0.062 | 0.772 ± 0.387 | 0.110 ± 0.118 | 0.737 ± 0.334 | 0.774 ± 0.170 | 0.889 ± 0.101 |
+| 200 | 0.970 ± 0.031 | 0.762 ± 0.222 | 0.394 ± 0.320 | 0.913 ± 0.063 | 0.916 ± 0.078 | 0.994 ± 0.005 |
+
+#### Bot
+
+| N | balanced random (oracle) | random-blind | active | coreset | cluster | stratified |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 0.394 ± 0.367 | 0.494 ± 0.315 | 0.000 ± 0.000 | 0.291 ± 0.237 | 0.399 ± 0.372 | 0.570 ± 0.372 |
+| 25 | 0.782 ± 0.391 | 0.886 ± 0.195 | 0.001 ± 0.001 | 0.098 ± 0.195 | 0.698 ± 0.396 | 0.670 ± 0.382 |
+| 50 | 0.863 ± 0.192 | 0.970 ± 0.014 | 0.002 ± 0.001 | 0.197 ± 0.241 | 0.987 ± 0.008 | 0.583 ± 0.476 |
+| 100 | 0.980 ± 0.015 | 0.974 ± 0.013 | 0.001 ± 0.001 | 0.496 ± 0.012 | 0.970 ± 0.030 | 0.985 ± 0.010 |
+| 200 | 0.983 ± 0.007 | 0.790 ± 0.339 | 0.256 ± 0.297 | 0.503 ± 0.002 | 0.976 ± 0.029 | 0.971 ± 0.019 |
+
+The highest mean at the two decision budgets is:
+
+| Family | winner @ N=25 | winner @ N=50 |
+|---|---|---|
+| brute-force | cluster, 0.957 | random-blind, 0.992 |
+| DoS | random-blind, 0.791 | stratified, 0.921 |
+| Bot | random-blind, 0.886 | cluster, 0.987 |
+
+Those point winners are not a general selection win. The pre-registered rule
+requires beating random-blind by more than one pooled standard deviation at
+N ≤ 50 on at least two of three families. **No strategy satisfies it.** Cluster
+qualifies only on Bot at N=50; stratified qualifies only on brute-force at
+N=10; active and coreset qualify nowhere. Balanced random is excluded from this
+comparison because it is an oracle using labels hidden from a real operator.
+
+The deployment result is therefore deliberately modest: **WS2 keeps
+stratified as its default because it guarantees that the analyst sees the full
+score spectrum, not because it generally beats blind random.** Label count
+alone is not a guarantee: at N=50, deployable random-blind ranges from 0.843
+(DoS) to 0.992 (brute-force), and the best strategy changes by family and
+budget. Active learning remains the clearest negative — a transfer-collapsed
+model's confidence is not a useful guide to informative labels.

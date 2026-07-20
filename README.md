@@ -54,10 +54,12 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   splits; Bot's blind-2017 baseline ranks *worse than chance* (AUC 0.40) and 50
   labels lift it to AUC 0.997. Cross-network IDS transfer is a few-shot
   *labelling* problem, not a representation-alignment one. The labelling budget
-  is small and measured (`make eval-label-efficiency`, 5 seeds): **~50 labels
-  reach ≥0.88 recall, ~100 reach ≥0.97**, and *active* (uncertainty) selection
-  underperforms random — a transfer-collapsed model's confidence can't pick
-  informative flows, so random balanced sampling wins.
+  and selection policy are measured (`make eval-label-efficiency`, 5 seeds).
+  Balanced random is an **oracle** that uses hidden labels; random-blind is the
+  deployable control. Across active, coreset, cluster, and score-stratified
+  alternatives, **none meets the pre-registered general-win criterion** over
+  random-blind. Stratified remains the WS2 default because it guarantees
+  score-spectrum coverage, not because it generally improves recall.
 - **Conformal alert-budget control (within-network).** A label-free online
   controller re-derives the operating point from the target network's own benign
   traffic, holding the alert rate at a 1% budget through within-network drift
@@ -154,6 +156,7 @@ make replay          # persist top detections as ATT&CK-tagged alerts
 make eval-cross         # cross-dataset 2017 → 2018 generalization (downloads a 2018 day)
 make eval-domain        # quantile/CORAL/feature/AE adaptation vs few-shot (2017 → 2018)
 make eval-cross-family  # cross-family stress test: few-shot across brute-force / DoS / Bot
+make eval-label-efficiency  # six label selectors; oracle vs deployable controls, 5 seeds
 ```
 
 ### API + dashboard

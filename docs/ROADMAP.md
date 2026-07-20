@@ -7,6 +7,7 @@
 | IDS models on CIC-IDS2017 (LightGBM baseline → autoencoder) with MLflow, flow-replay service | ✅ done |
 | Fusion/correlation engine, FastAPI endpoints (dashboard superseded by React/TS frontend below) | ✅ done |
 | React/TS frontend — question-led three-tab storyline (Threat feed / Landscape / Model report card) | ✅ done |
+| Cross-network label selection (WS3) — six strategies across three families and five budgets | ✅ done — no general winner; stratified retained for score coverage |
 | Polish: README, demo video, model card, technical blog post | 🔨 in progress |
 
 The fusion milestone originally scoped a Streamlit dashboard; it was dropped in
@@ -38,11 +39,13 @@ Research extensions that exceeded the original plan, all recorded in
   About 50 labelled target flows recover 0.95–0.99 recall across three attack
   families (brute-force, DoS, Bot) on contamination-free held-out splits.
   Cross-network IDS transfer is a few-shot labelling problem
-  (`sentinel/ids/domain_adapt.py`). The budget is measured (multi-seed
-  label-efficiency curve, `make eval-label-efficiency`): ~50 labels reach ≥0.88
-  recall, ~100 reach ≥0.97 — and *active* (uncertainty) selection underperforms
-  random, since a transfer-collapsed model's confidence can't pick informative
-  flows.
+  (`sentinel/ids/domain_adapt.py`). The multi-seed label-selection study
+  (`make eval-label-efficiency`) compares balanced-random oracle,
+  random-blind, active, coreset, cluster, and score-stratified sampling. No
+  selector beats deployable random-blind by the pre-registered margin on at
+  least two families: cluster qualifies only for Bot at N=50, stratified only
+  for brute-force at N=10, and active/coreset never do. Stratified remains the
+  WS2 default for guaranteed score-spectrum coverage, not superior recall.
 - **Deep fusion scoring** — the headline join, hardened past set overlap. Each
   alert↔campaign match is scored by a calibrated fusion strength = technique
   rarity (IDF over the report corpus) × campaign recency (age decay) ×

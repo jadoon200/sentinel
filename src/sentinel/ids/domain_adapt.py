@@ -16,6 +16,8 @@ assumed:
   a distribution-free feature scale.
 - `quantile_map` — transport source features into the target network's units by
   composing the source benign ECDF with the target benign inverse ECDF.
+- `select_labels` — choose a target-network labelling batch without labels via
+  blind random, uncertainty, score-stratified, coreset, or cluster sampling.
 
 These methods need only target *benign* traffic — which any defender has on
 their own network — so they stay within the project's label-free, zero-cost
@@ -25,6 +27,9 @@ rules.
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from sklearn.cluster import MiniBatchKMeans
+
+from sentinel.ids.data import FlowScaler
 
 
 def _impute(values: NDArray[np.float64], medians: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -200,6 +205,129 @@ def stable_features(
     shift = feature_shift(source_benign, target_benign)
     n_keep = max(1, int(len(shift) * keep_frac))
     return sorted(shift.index[-n_keep:].tolist())
+
+
+def select_labels(
+    pool_x: NDArray[np.float64],
+    n: int,
+    *,
+    strategy: str,
+    scores: NDArray[np.float64] | None = None,
+    seed: int = 13,
+) -> NDArray[np.intp]:
+    """Select unique pool-row indices for labelling without using labels.
+
+    ``random`` is retained as an alias of the deployable ``random-blind``
+    selector. The evaluation harness special-cases its historical balanced
+    ``random`` control because that oracle needs ground-truth labels and cannot
+    honestly live behind this label-free interface.
+
+    ``coreset`` performs k-center greedy selection in robust-scaled feature
+    space; ``cluster`` chooses the nearest unique point to each mini-batch
+    k-means centroid; ``stratified`` samples evenly across source-model score
+    deciles; and ``active`` chooses scores closest to 0.5.
+    """
+    values = np.asarray(pool_x, dtype=np.float64)
+    if values.ndim != 2:
+        raise ValueError("pool_x must be a two-dimensional feature matrix")
+
+    n_pool = len(values)
+    if n <= 0 or n_pool == 0:
+        return np.empty(0, dtype=np.intp)
+    if n >= n_pool:
+        return np.arange(n_pool, dtype=np.intp)
+
+    valid = {"random", "random-blind", "active", "coreset", "cluster", "stratified"}
+    if strategy not in valid:
+        choices = ", ".join(sorted(valid))
+        raise ValueError(f"unknown label-selection strategy {strategy!r}; choose from {choices}")
+
+    rng = np.random.default_rng(seed)
+    if strategy in {"random", "random-blind"}:
+        return np.asarray(rng.choice(n_pool, n, replace=False), dtype=np.intp)
+
+    if strategy in {"active", "stratified"}:
+        if scores is None:
+            raise ValueError(f"{strategy} selection requires source-model scores")
+        score_values = np.asarray(scores, dtype=np.float64)
+        if score_values.ndim != 1 or len(score_values) != n_pool:
+            raise ValueError("scores must be one-dimensional with one value per pool row")
+        if strategy == "active":
+            uncertainty = np.abs(score_values - 0.5)
+            return np.asarray(np.argsort(uncertainty, kind="stable")[:n], dtype=np.intp)
+        return _stratified_indices(score_values, n, rng)
+
+    frame = pd.DataFrame(values)
+    scaled = np.asarray(FlowScaler().fit(frame).transform(frame), dtype=np.float64)
+    scaled = np.nan_to_num(scaled, nan=0.0, posinf=10.0, neginf=-10.0)
+    if strategy == "coreset":
+        return _coreset_indices(scaled, n, rng)
+    return _cluster_indices(scaled, n, seed)
+
+
+def _stratified_indices(
+    scores: NDArray[np.float64], n: int, rng: np.random.Generator
+) -> NDArray[np.intp]:
+    """Draw evenly from equal-count score deciles (or fewer bins when n < 10)."""
+    n_bins = min(10, n, len(scores))
+    order = np.argsort(scores, kind="stable")
+    bins = np.array_split(order, n_bins)
+    per_bin, remainder = divmod(n, n_bins)
+    selected: list[NDArray[np.intp]] = []
+    for bin_number, bucket in enumerate(bins):
+        take = per_bin + int(bin_number < remainder)
+        selected.append(np.asarray(rng.choice(bucket, take, replace=False), dtype=np.intp))
+    result = np.concatenate(selected).astype(np.intp, copy=False)
+    rng.shuffle(result)
+    return result
+
+
+def _coreset_indices(
+    scaled: NDArray[np.float64], n: int, rng: np.random.Generator
+) -> NDArray[np.intp]:
+    """Run k-center greedy with a running minimum-distance vector."""
+    n_pool = len(scaled)
+    candidate_limit = max(20_000, n)
+    if n_pool > candidate_limit:
+        candidates = np.asarray(rng.choice(n_pool, candidate_limit, replace=False), dtype=np.intp)
+    else:
+        candidates = np.arange(n_pool, dtype=np.intp)
+
+    candidate_x = scaled[candidates]
+    centroid = candidate_x.mean(axis=0)
+    first = int(np.argmin(np.sum((candidate_x - centroid) ** 2, axis=1)))
+    selected = np.empty(n, dtype=np.intp)
+    selected[0] = first
+    min_distance = np.sum((candidate_x - candidate_x[first]) ** 2, axis=1)
+    min_distance[first] = -np.inf
+
+    for position in range(1, n):
+        farthest = int(np.argmax(min_distance))
+        selected[position] = farthest
+        distance = np.sum((candidate_x - candidate_x[farthest]) ** 2, axis=1)
+        min_distance = np.minimum(min_distance, distance)
+        min_distance[farthest] = -np.inf
+    return candidates[selected]
+
+
+def _cluster_indices(scaled: NDArray[np.float64], n: int, seed: int) -> NDArray[np.intp]:
+    """Pick one unique pool point nearest each MiniBatchKMeans centroid."""
+    model = MiniBatchKMeans(
+        n_clusters=n,
+        random_state=seed,
+        batch_size=min(4096, len(scaled)),
+        n_init=3,
+    ).fit(scaled)
+    centroids = np.asarray(model.cluster_centers_, dtype=np.float64)
+    available = np.ones(len(scaled), dtype=np.bool_)
+    selected = np.empty(n, dtype=np.intp)
+    for position, centroid in enumerate(centroids):
+        distances = np.sum((scaled - centroid) ** 2, axis=1)
+        distances[~available] = np.inf
+        nearest = int(np.argmin(distances))
+        selected[position] = nearest
+        available[nearest] = False
+    return selected
 
 
 def few_shot_training_set(

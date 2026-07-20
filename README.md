@@ -44,9 +44,11 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   A 2017-trained IDS is perfectly separable within-dataset (ROC-AUC **1.0000**)
   but at any usable threshold detects *none* of the same attacks on a different
   network in 2018 (**recall @ 1% FPR 0.000**) — the absolute threshold lands in
-  the wrong place for 2018's score distribution. Every **label-free** fix failed:
+  the wrong place for 2018's score distribution. No **label-free** fix
+  generalizes: benign quantile space narrows brute-force to recall **0.502 ±
+  0.355**, but falls to 0.033 on DoS and 0.001 on Bot; quantile transport,
   CORAL covariance alignment, transfer-stable feature selection, and a
-  target-trained autoencoder all stayed at recall ~0. **Few-shot is the fix** —
+  target-trained autoencoder also fail across families. **Few-shot is the fix** —
   50 labelled target flows recover **0.95–0.99 recall across three different
   attack families** (brute-force, DoS, Bot) on contamination-free held-out
   splits; Bot's blind-2017 baseline ranks *worse than chance* (AUC 0.40) and 50
@@ -150,7 +152,7 @@ make train-sequence  # per-host sequence model (MLX gated recurrence)
 make train-profile   # host-profile fan-out detector (PortScan)
 make replay          # persist top detections as ATT&CK-tagged alerts
 make eval-cross         # cross-dataset 2017 → 2018 generalization (downloads a 2018 day)
-make eval-domain        # label-free domain-adaptation fixes vs few-shot (2017 → 2018)
+make eval-domain        # quantile/CORAL/feature/AE adaptation vs few-shot (2017 → 2018)
 make eval-cross-family  # cross-family stress test: few-shot across brute-force / DoS / Bot
 ```
 

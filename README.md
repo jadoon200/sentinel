@@ -2,7 +2,7 @@
 
 **Cyber threat intelligence fusion platform** — correlates open-source threat intelligence (OSINT) with ML-based network intrusion detection, the way real SOCs and intelligence fusion centres do.
 
-> OSINT ingestion, NLP technique mapping over the full ATT&CK catalog, campaign correlation, a five-detector IDS ensemble with an honest cross-dataset/temporal evaluation, a measured cross-network transfer fix (few-shot domain adaptation), conformal alert-budget control, host-fusion threat rollups, temporal analytics, a read-only knowledge-graph API, and a React/TypeScript dashboard are all in place. Remaining polish: demo video + blog post. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> OSINT ingestion, NLP technique mapping over the full ATT&CK catalog, campaign correlation, a five-detector IDS ensemble with an honest cross-dataset/temporal evaluation, a measured cross-network transfer fix (few-shot domain adaptation), conformal alert-budget control, host-fusion threat rollups, temporal analytics, a read-only-by-default knowledge-graph API, and a four-tab React/TypeScript dashboard with an optional calibration lab are all in place. Remaining polish: demo video + blog post. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -60,6 +60,14 @@ All numbers from [docs/EVAL.md](docs/EVAL.md), stated honestly.
   alternatives, **none meets the pre-registered general-win criterion** over
   random-blind. Stratified remains the WS2 default because it guarantees
   score-spectrum coverage, not because it generally improves recall.
+- **Few-shot calibration, live rather than just a table.** The optional fourth
+  dashboard tab samples 50 score-stratified flows, keeps ground truth hidden
+  until the operator answers, retrains, and grades on a frozen held-out test.
+  On the representative one-family DoS pack, 50 accurate labels lift recall
+  **0.0160833 → 0.9415** at FPR 0.0007917 and AUC 0.9852259. One deliberate
+  wrong label lowers recall to 0.834, exposing label-noise sensitivity. This is
+  the product reproduction of the few-shot mechanism, not a replacement for
+  the separate multi-family curve.
 - **Conformal alert-budget control (within-network).** A label-free online
   controller re-derives the operating point from the target network's own benign
   traffic, holding the alert rate at a 1% budget through within-network drift
@@ -162,18 +170,33 @@ make eval-label-efficiency  # six label selectors; oracle vs deployable controls
 ### API + dashboard
 
 ```bash
-make api        # read-only knowledge-graph API on :8000 (needs make up)
-make ui         # React dashboard dev server on :5173 (needs make api running)
+make api        # read-only-by-default knowledge-graph API on :8000 (needs make up)
+make ui         # four-tab React dashboard on :5173 (needs make api running)
 make briefing   # print the auto-generated daily threat briefing
 ```
+
+The calibration lab is optional and off by default. To run the representative
+DoS workflow locally:
+
+```bash
+make build-calibration-pack  # 100k source / 24k pool / 8k calibration / 48k test
+SENTINEL_API_ENABLE_CALIBRATION=true make api
+make ui
+```
+
+For a broader pack, run
+`python scripts/build_calibration_pack.py --families brute-force DoS Bot`.
 
 API endpoints: `/health`, `/stats`, `/campaigns` (+ `/{id}`), `/reports`,
 `/alerts` (+ `/{id}/context` for scored technique fusion), `/hosts` and
 `/hosts/simulated` (host-fusion threat rollups), `/techniques` (+ `/{id}`),
 `/trending`, `/feed-drift`, `/briefing`, and `/attack-navigator-layer`
-(ATT&CK Navigator export of alert/campaign technique coverage).
+(ATT&CK Navigator export of alert/campaign technique coverage). When explicitly
+enabled, isolated `/calibration/*` routes create batches, record/reveal labels,
+retrain, and return the frozen reference curve; with the default flag they all
+return 404 and the graph API remains read-only.
 
-The dashboard is a question-led three-tab storyline over those endpoints:
+The dashboard is a question-led four-tab storyline over those endpoints:
 
 - **Threat feed** — the fusion view. Per-host threat rollups: each host shows
   which of the five detectors agree, its unioned ATT&CK techniques, a
@@ -188,7 +211,11 @@ The dashboard is a question-led three-tab storyline over those endpoints:
   cross-network failure *and* its few-shot fix, plus a **"Try the mapper"** panel:
   paste any CTI paragraph and the live zero-shot mapper ranks the closest ATT&CK
   techniques (`POST /map-techniques`). It inspects only the pasted text — it does
-  not fetch or scan a URL — so the API stays effectively read-only.
+  not fetch or scan a URL.
+- **Calibrate** — the default-off adaptation lab. Label 50 flows with hidden
+  truth, retrain synchronously under the API's concurrency guard, then compare
+  blind and adapted recall on a disjoint test. A clearly marked simulation
+  shortcut lets a reviewer reproduce the accurate-label result quickly.
 
 ### Deploying the API publicly
 
@@ -200,6 +227,7 @@ memory — all local-safe by default and tuned via `SENTINEL_API_*` env vars. Se
 sizing steps to do at deploy time.
 
 For a **zero-cost demo**, `render.yaml` + `Dockerfile.deploy` ship the dashboard
-and read-only API as a single free container with the graph baked in as a SQLite
-seed (no managed database) — see
+and default-off/read-only API as a single free container with the graph baked in
+as a SQLite seed (no managed database). Public calibration remains a follow-up
+until its Release pack, dependencies, and retraining RAM are validated — see
 [docs/DEPLOY.md § Deploy to the cloud](docs/DEPLOY.md#deploy-to-the-cloud-free-one-service).

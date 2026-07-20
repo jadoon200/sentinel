@@ -6,8 +6,9 @@
 | NLP extraction + ATT&CK mapping, knowledge graph schema, OTX + RSS ingesters | ✅ done |
 | IDS models on CIC-IDS2017 (LightGBM baseline → autoencoder) with MLflow, flow-replay service | ✅ done |
 | Fusion/correlation engine, FastAPI endpoints (dashboard superseded by React/TS frontend below) | ✅ done |
-| React/TS frontend — question-led three-tab storyline (Threat feed / Landscape / Model report card) | ✅ done |
+| React/TS frontend — question-led four-tab storyline (Threat feed / Landscape / Model report card / Calibrate) | ✅ done |
 | Cross-network label selection (WS3) — six strategies across three families and five budgets | ✅ done — no general winner; stratified retained for score coverage |
+| Few-shot onboarding calibration (WS2) — frozen pack, gated API, isolated tables, fourth dashboard tab | ✅ done locally — 50 accurate DoS labels: recall 0.0161 → 0.9415; slim public deploy follow-up |
 | Polish: README, demo video, model card, technical blog post | 🔨 in progress |
 
 The fusion milestone originally scoped a Streamlit dashboard; it was dropped in
@@ -46,6 +47,14 @@ Research extensions that exceeded the original plan, all recorded in
   least two families: cluster qualifies only for Bot at N=50, stratified only
   for brute-force at N=10, and active/coreset never do. Stratified remains the
   WS2 default for guaranteed score-spectrum coverage, not superior recall.
+- **Few-shot calibration workflow** — the measured transfer fix is now an
+  operator-facing product path: build a frozen Parquet pack, label 50
+  score-stratified flows in the fourth dashboard tab, retrain, and reveal the
+  held-out result. On the representative DoS pack, 50 accurate labels lift
+  recall **0.0161 → 0.9415** at 0.0008 FPR (AUC 0.9852); one deliberate wrong
+  label lowers recall to 0.834, so label noise is exposed rather than hidden.
+  The isolated `/calibration/*` routes are default-off; packaging the pack and
+  validating dependencies/RAM on the slim public image remain follow-up work.
 - **Deep fusion scoring** — the headline join, hardened past set overlap. Each
   alert↔campaign match is scored by a calibrated fusion strength = technique
   rarity (IDF over the report corpus) × campaign recency (age decay) ×

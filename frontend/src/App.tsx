@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { Calibrate } from "./views/Calibrate";
 import { Landscape } from "./views/Landscape";
 import { ReportCard } from "./views/ReportCard";
 import { ThreatFeed } from "./views/ThreatFeed";
@@ -12,6 +13,7 @@ const TABS = [
   { id: "feed", label: "Threat feed", sub: "what should I look at now?" },
   { id: "land", label: "Landscape", sub: "what's happening in the world?" },
   { id: "card", label: "Model report card", sub: "how much should I trust this?" },
+  { id: "cal", label: "Calibrate", sub: "teach it this network" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -47,6 +49,7 @@ export default function App() {
         {tab === "feed" && <ThreatFeed />}
         {tab === "land" && <Landscape />}
         {tab === "card" && <ReportCard />}
+        {tab === "cal" && <Calibrate />}
       </div>
     </QueryClientProvider>
   );

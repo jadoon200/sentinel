@@ -143,3 +143,77 @@ button:disabled { opacity: 0.4; cursor: default; }
 .roster-row i { font-size: 20px; color: var(--muted); }
 .roster-main { flex: 1; } .roster-main div:first-child { font-size: 13.5px; }
 .roster-score { font-size: 12px; color: var(--good); }
+
+/* Calibration lab */
+.calibrate-intro { max-width: 780px; margin: 18px auto 0; }
+.cal-hero { padding: 34px 38px; background: radial-gradient(circle at 85% 5%, rgba(76,168,245,.12), transparent 42%), var(--panel); }
+.cal-kicker { color: var(--accent); font-family: "SF Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .12em; }
+.cal-hero h2, .cal-result > h2, .cal-ready h2, .cal-reveal h2 { display: block; font-size: 25px; line-height: 1.25; margin: 10px 0 9px; letter-spacing: -.02em; }
+.cal-hero > p { max-width: 650px; color: var(--muted); }
+.cal-guardrails { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 24px 0; }
+.cal-guardrails span { border-top: 1px solid var(--border); padding-top: 10px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+.cal-guardrails b { display: block; color: var(--accent); font: 10px "SF Mono", monospace; margin-bottom: 4px; }
+.cal-primary { background: var(--accent); border-color: var(--accent); color: #06111b; font-weight: 650; padding: 10px 17px; }
+.cal-primary:hover:not(:disabled) { background: #70b9f7; border-color: #70b9f7; }
+.cal-error { padding-left: 0; margin-bottom: 0; }
+.cal-progress-head { display: flex; justify-content: space-between; align-items: end; margin-bottom: 10px; }
+.cal-progress-head h2 { margin: 6px 0 0; font-size: 22px; }
+.cal-progress-head > b { color: var(--accent); font-size: 25px; }
+.cal-progress-head > b small { color: var(--hint); font-size: 13px; }
+.cal-progress { height: 4px; border-radius: 3px; background: var(--panel-2); overflow: hidden; margin-bottom: 20px; }
+.cal-progress i { display: block; height: 100%; background: var(--accent); transition: width .25s ease; }
+.cal-flow-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(230px, .8fr); gap: 16px; align-items: start; }
+.cal-flow-card { padding: 0; overflow: hidden; }
+.cal-flow-title { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font: 11px "SF Mono", monospace; color: var(--accent); }
+.cal-flow-title small { color: var(--hint); }
+.cal-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cal-features > div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border); }
+.cal-features > div:nth-child(odd) { border-right: 1px solid var(--border); }
+.cal-features span { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-features b { font: 11.5px "SF Mono", monospace; font-weight: 500; }
+.cal-flow-card > .hint { margin: 10px 18px 14px; }
+.cal-decision { position: sticky; top: 16px; }
+.cal-decision h2 { display: block; font-size: 20px; margin: 8px 0 5px; }
+.cal-decision p { color: var(--muted); font-size: 12px; }
+.cal-decision button { display: block; width: 100%; margin: 9px 0; text-align: left; padding: 11px 12px; }
+.cal-decision button.attack { border-color: rgba(248,113,113,.35); }
+kbd { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; margin-right: 8px; font: 10px "SF Mono", monospace; color: var(--accent); }
+.cal-decision > small { display: block; text-align: center; color: var(--hint); font-size: 10px; margin-top: 12px; }
+.cal-reveal { padding: 32px; border-left: 3px solid var(--good); }
+.cal-reveal.wrong { border-left-color: var(--bad); }
+.cal-reveal.correct .cal-kicker { color: var(--good); }
+.cal-reveal.wrong .cal-kicker { color: var(--bad); }
+.cal-ready { padding: 32px; border-color: rgba(63,211,154,.35); }
+.cal-skip { display: flex; align-items: center; gap: 12px; color: var(--hint); font-size: 10.5px; margin-top: -6px; }
+.cal-skip button { font-size: 11px; padding: 6px 10px; }
+.cal-result { padding: 30px; }
+.cal-result > h2 { margin-bottom: 24px; }
+.cal-scoreboard { display: flex; align-items: center; gap: 25px; margin-bottom: 24px; }
+.cal-scoreboard > div { flex: 1; background: var(--panel-2); border-radius: 10px; padding: 18px; }
+.cal-scoreboard span { color: var(--muted); font-size: 11px; display: block; }
+.cal-scoreboard strong { font-size: 34px; letter-spacing: -.04em; }
+.cal-scoreboard .after { border: 1px solid rgba(63,211,154,.35); }
+.cal-scoreboard .after strong { color: var(--good); }
+.cal-scoreboard > i { color: var(--hint); font-size: 22px; }
+.cal-family-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cal-family-grid > div { display: flex; justify-content: space-between; background: var(--panel-2); border-radius: 7px; padding: 10px 12px; }
+.cal-family-grid span { color: var(--muted); text-transform: capitalize; }
+.cal-family-grid b { color: var(--good); }
+.panel h2 small { color: var(--hint); font-size: 10px; font-weight: 400; }
+.cal-curve-row { display: grid; grid-template-columns: 70px 1fr 48px; gap: 10px; align-items: center; padding: 6px 0; font-size: 11px; }
+.cal-curve-row > span { color: var(--muted); }
+.cal-curve-row > div { height: 7px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+.cal-curve-row i { height: 100%; display: block; background: linear-gradient(90deg, var(--accent), var(--good)); border-radius: 5px; }
+.cal-curve-row b { text-align: right; font: 11px "SF Mono", monospace; }
+
+@media (max-width: 760px) {
+  .shell { padding: 18px 16px 60px; }
+  .tabs { justify-content: flex-start; overflow-x: auto; }
+  .tabs button { min-width: max-content; padding-left: 12px; padding-right: 12px; }
+  .cal-guardrails, .cal-family-grid { grid-template-columns: 1fr; }
+  .cal-flow-layout { grid-template-columns: 1fr; }
+  .cal-decision { position: static; }
+  .cal-scoreboard { gap: 9px; }
+  .cal-scoreboard strong { font-size: 25px; }
+  .cal-hero { padding: 25px 22px; }
+}

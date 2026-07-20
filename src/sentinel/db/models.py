@@ -1,7 +1,18 @@
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -168,6 +179,61 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now().astimezone()
     )
+
+
+class CalibrationBatch(Base):
+    """One reproducible target-network flow-labelling session."""
+
+    __tablename__ = "calibration_batches"
+
+    id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+    strategy: Mapped[str] = mapped_column(String(32))
+    seed: Mapped[int] = mapped_column(Integer())
+    n_flows: Mapped[int] = mapped_column(Integer())
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    notes: Mapped[str | None] = mapped_column(Text())
+
+
+class CalibrationFlow(Base):
+    """A sampled flow; truth stays server-side until the operator labels it."""
+
+    __tablename__ = "calibration_flows"
+    __table_args__ = (UniqueConstraint("batch_id", "pool_row"),)
+
+    id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
+    batch_id: Mapped[int] = mapped_column(
+        ForeignKey("calibration_batches.id", ondelete="CASCADE"), index=True
+    )
+    pool_row: Mapped[int] = mapped_column(Integer())
+    features: Mapped[dict[str, float]] = mapped_column(JsonType)
+    model_score: Mapped[float] = mapped_column(Float())
+    true_label: Mapped[str] = mapped_column(String(16))
+    operator_label: Mapped[str | None] = mapped_column(String(16))
+    labelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CalibrationRun(Base):
+    """Before/after metrics from retraining one labelled calibration batch."""
+
+    __tablename__ = "calibration_runs"
+
+    id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
+    batch_id: Mapped[int] = mapped_column(
+        ForeignKey("calibration_batches.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now().astimezone()
+    )
+    recall_before: Mapped[float] = mapped_column(Float())
+    recall_after: Mapped[float] = mapped_column(Float())
+    fpr_after: Mapped[float] = mapped_column(Float())
+    auc_after: Mapped[float] = mapped_column(Float())
+    n_labels_used: Mapped[int] = mapped_column(Integer())
+    operator_accuracy: Mapped[float] = mapped_column(Float())
+    metrics: Mapped[dict[str, Any]] = mapped_column(JsonType)
 
 
 class KevEntry(Base):

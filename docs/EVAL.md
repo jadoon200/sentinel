@@ -759,3 +759,40 @@ alone is not a guarantee: at N=50, deployable random-blind ranges from 0.843
 (DoS) to 0.992 (brute-force), and the best strategy changes by family and
 budget. Active learning remains the clearest negative — a transfer-collapsed
 model's confidence is not a useful guide to informative labels.
+
+### Live onboarding calibration — the few-shot result as a workflow
+
+WS2 turns the offline finding into the dashboard's fourth **Calibrate** tab:
+sample score-stratified target flows, hide their ground truth while the
+operator labels them, retrain on source plus those operator labels, and grade
+once on a disjoint held-out target test. The API routes are isolated under
+`/calibration/*` and default to 404 unless
+`SENTINEL_API_ENABLE_CALIBRATION=true`.
+
+The representative local acceptance pack is deliberately one scenario, DoS,
+not a new multi-family curve. `make build-calibration-pack` freezes 100,000
+CIC-IDS2017 source rows, a 24,000-flow CSE-CIC-IDS2018 selectable pool, 8,000
+target-benign threshold-calibration flows, and a 48,000-flow held-out test.
+The builder can instead take `--families brute-force DoS Bot`; the result below
+is from the default DoS pack only.
+
+| Live run | Value |
+|---|---:|
+| selection | score-stratified, 50 flows |
+| blind-source recall before | 0.0160833 |
+| held-out recall after | **0.9415** |
+| held-out FPR after | 0.0007917 |
+| held-out ROC-AUC after | 0.9852259 |
+| operator accuracy | 1.0000 |
+
+This reproduces the mechanism established by the few-shot experiments: a
+small set of accurate in-network labels re-anchors the transferred model. It
+does **not** replace the multi-family results above. The static curve shown in
+the UI is the recorded WS3 score-stratified reference, while the large
+before/after card is this operator session's one-family held-out grade.
+
+Label quality matters honestly. A deliberate run with one wrong label reduced
+held-out recall to **0.834**, rather than silently grading with hidden truth.
+The product uses the operator's labels for fitting and reports operator
+accuracy beside the model metrics. The full four-tab flow was manually verified
+in the browser with no console errors.

@@ -137,3 +137,21 @@ def test_retrain_rejects_batch_with_zero_labels(calibration_client: TestClient) 
 def test_create_validates_batch_size(calibration_client: TestClient) -> None:
     assert calibration_client.post("/calibration/batches", json={"n": 0}).status_code == 422
     assert calibration_client.post("/calibration/batches", json={"n": 201}).status_code == 422
+
+
+def test_create_rejects_negative_seed(calibration_client: TestClient) -> None:
+    response = calibration_client.post("/calibration/batches", json={"n": 4, "seed": -1})
+    assert response.status_code == 422
+
+
+def test_corrupt_pack_is_503_not_500(
+    calibration_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sentinel.api import app as api_app
+
+    def broken_pack() -> CalibrationPack:
+        raise KeyError("baseline")  # stale metadata.json missing a required key
+
+    monkeypatch.setattr(api_app, "_get_calibration_pack", broken_pack)
+    response = calibration_client.post("/calibration/batches", json={"n": 4})
+    assert response.status_code == 503

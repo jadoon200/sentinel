@@ -842,7 +842,9 @@ CalibrationLabel = Literal["benign", "attack"]
 class CalibrationBatchCreate(BaseModel):
     n: int = Field(default=50, ge=1, le=200)
     strategy: CalibrationStrategy = "stratified"
-    seed: int = 13
+    # np.random.default_rng rejects negative seeds; validate here so a bad seed
+    # is a 422 instead of masquerading as a 503 pack failure.
+    seed: int = Field(default=13, ge=0)
     notes: str | None = Field(default=None, max_length=500)
 
 
@@ -991,7 +993,7 @@ def create_calibration_batch(
 
         pack = _get_calibration_pack()
         rows = sample_batch(pack, n=req.n, strategy=req.strategy, seed=req.seed)
-    except (FileNotFoundError, ImportError, OSError, ValueError) as exc:
+    except (FileNotFoundError, ImportError, KeyError, OSError, ValueError) as exc:
         raise HTTPException(status_code=503, detail="calibration pack unavailable") from exc
 
     batch = CalibrationBatch(
@@ -1099,7 +1101,7 @@ def retrain_calibration_batch(
         pack = _get_calibration_pack()
         labelled = [(flow.pool_row, 1 if flow.operator_label == "attack" else 0) for flow in flows]
         metrics = retrain(pack, labelled, seed=batch.seed)
-    except (FileNotFoundError, ImportError, OSError) as exc:
+    except (FileNotFoundError, ImportError, KeyError, OSError) as exc:
         raise HTTPException(status_code=503, detail="calibration worker unavailable") from exc
     except (IndexError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

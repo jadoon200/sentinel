@@ -127,6 +127,14 @@ def test_full_label_relabel_simulate_and_retrain_workflow(
     assert len(refreshed["runs"]) == 1
     assert calibration_client.get("/calibration/curve").status_code == 200
 
+    # Relabelling after a retrain must not demote the batch back to "labelled".
+    relabel_after_run = calibration_client.post(
+        f"/calibration/flows/{first['id']}/label", json={"label": "attack"}
+    )
+    assert relabel_after_run.status_code == 200
+    still = calibration_client.get(f"/calibration/batches/{batch['id']}").json()
+    assert still["status"] == "retrained"
+
 
 def test_retrain_rejects_batch_with_zero_labels(calibration_client: TestClient) -> None:
     batch = calibration_client.post("/calibration/batches", json={"n": 4}).json()

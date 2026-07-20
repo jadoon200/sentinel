@@ -969,7 +969,9 @@ def _label_flow(
         )
     )
     batch = session.get(CalibrationBatch, flow.batch_id)
-    if batch is not None and (labelled or 0) >= batch.n_flows:
+    # Promote open -> labelled once every flow has an answer; never demote a
+    # batch that has already been retrained.
+    if batch is not None and batch.status == "open" and (labelled or 0) >= batch.n_flows:
         batch.status = "labelled"
     session.commit()
     session.refresh(flow)

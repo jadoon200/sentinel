@@ -45,7 +45,9 @@ function replaceFlow(batch: CalibrationBatch, flow: CalibrationFlow): Calibratio
 }
 
 function message(error: unknown) {
-  if (error instanceof ApiError && error.status === 404) {
+  // The feature-flag guard 404s with this exact detail; other 404s (flow or
+  // batch not found) should surface their own message, not the setup hint.
+  if (error instanceof ApiError && error.status === 404 && error.message.includes("disabled")) {
     return "The calibration lab is disabled on this server. Set SENTINEL_API_ENABLE_CALIBRATION=true after building the local pack.";
   }
   return error instanceof Error ? error.message : "Calibration request failed.";

@@ -9,10 +9,10 @@ budget (50) and random selection. This pushes on both:
   - **Label-efficiency curve:** recall @1% FPR as the budget N sweeps
     10 -> 200, multi-seed (mean +/- std), so the *minimum* viable labelling
     budget is a measured number, not a guess.
-  - **Active vs random:** does uncertainty sampling (label the target flows the
-    blind 2017 model is least sure about) reach the same recall with fewer
-    labels than random? Honest either way — if random ties it, random wins on
-    simplicity.
+  - **Selection strategy:** compare a balanced random oracle with deployable
+    blind random, uncertainty, score-stratified, k-center coreset, and cluster
+    sampling. Honest either way — if geometry does not beat blind random,
+    simplicity wins.
 
 Same protocol as eval_cross_family: target-benign-calibrated 1% FPR, held-out
 test split (the labelling pool and the test set are disjoint, no contamination).
@@ -31,6 +31,7 @@ from sklearn.model_selection import train_test_split
 
 from sentinel.config import get_settings
 from sentinel.ids.cross_dataset import canonical_columns, load_2018_day, shared_feature_xy
+from sentinel.ids.domain_adapt import select_labels
 from sentinel.ids.train import DEFAULT_PARAMS, train_lightgbm
 
 DAYS = {
@@ -39,6 +40,7 @@ DAYS = {
     "Bot": "Friday-02-03-2018",
 }
 BUDGETS = [10, 25, 50, 100, 200]
+STRATEGIES = ("random", "random-blind", "active", "coreset", "cluster", "stratified")
 
 
 def _recall_at_fpr(
@@ -64,7 +66,25 @@ def main() -> None:
     parser.add_argument("--alpha", type=float, default=0.01)
     parser.add_argument("--seeds", type=int, default=5)
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument(
+        "--strategies",
+        nargs="+",
+        choices=STRATEGIES,
+        default=list(STRATEGIES),
+        help="selection strategies to evaluate (random is the balanced oracle)",
+    )
+    parser.add_argument(
+        "--families",
+        nargs="+",
+        choices=list(DAYS),
+        default=list(DAYS),
+        help="attack families to evaluate",
+    )
     args = parser.parse_args()
+    if args.seeds < 1:
+        parser.error("--seeds must be at least 1")
+    strategies = list(dict.fromkeys(args.strategies))
+    families = list(dict.fromkeys(args.families))
 
     settings = get_settings()
     d2017 = settings.ids_data_dir
@@ -78,7 +98,8 @@ def main() -> None:
     results: dict[str, dict[int, dict[str, list[float]]]] = {}
     baseline_recall: dict[str, float] = {}
 
-    for family, day in DAYS.items():
+    for family in families:
+        day = DAYS[family]
         tgt = load_2018_day(d2017.parent / "cicids2018" / f"{day}.csv")
         is_atk = tgt["label"].str.upper() != "BENIGN"
         ben = tgt[~is_atk].sample(min((~is_atk).sum(), 40_000), random_state=args.seed)
@@ -86,7 +107,13 @@ def main() -> None:
         tgt = pd.concat([ben, atk]).reset_index(drop=True)
         x17, x18, y17, y18, _ = shared_feature_xy(src, tgt)
         y17a, y18a = y17.to_numpy(), y18.to_numpy()
-        median18 = np.nanmedian(x18.to_numpy(dtype=float), axis=0)
+
+        # Split before fitting any target-derived statistic. The pool supplies
+        # imputation, calibration, and selection; test is scored only.
+        pool_idx, test_idx = train_test_split(
+            np.arange(len(x18)), test_size=0.6, random_state=args.seed, stratify=y18a
+        )
+        median18 = np.nanmedian(x18.iloc[pool_idx].to_numpy(dtype=float), axis=0)
 
         def fill(frame: pd.DataFrame, m: np.ndarray = median18) -> np.ndarray:
             v = frame.to_numpy(dtype=float)
@@ -94,9 +121,6 @@ def main() -> None:
 
         src_x = fill(x17)
         target_all = fill(x18)
-        pool_idx, test_idx = train_test_split(
-            np.arange(len(x18)), test_size=0.6, random_state=args.seed, stratify=y18a
-        )
         x_test, y_test = target_all[test_idx], y18a[test_idx]
         pool_ben = pool_idx[y18a[pool_idx] == 0]
         pool_atk = pool_idx[y18a[pool_idx] == 1]
@@ -110,26 +134,55 @@ def main() -> None:
             _scores(base, x_test), y_test, _scores(base, cal), args.alpha
         )
         pool_all = np.concatenate([pool_atk, select_ben])
-        uncertainty = -np.abs(_scores(base, target_all[pool_all]) - 0.5)  # 0.5 = least certain
-        ranked_pool = pool_all[np.argsort(-uncertainty)]  # most uncertain first
+        pool_x = target_all[pool_all]
+        pool_scores = _scores(base, pool_x)
 
-        results[family] = {n: {"random": [], "active": []} for n in BUDGETS}
-        for seed in range(args.seeds):
-            rng = np.random.default_rng(args.seed + seed)
+        # Geometry/uncertainty selections stay fixed across retraining seeds;
+        # their variance therefore comes from the model refit. Stochastic blind
+        # random and stratified sampling redraw for each seed.
+        fixed_strategies = {"active", "coreset", "cluster"}
+        fixed: dict[tuple[int, str], np.ndarray] = {}
+        for n in BUDGETS:
+            for strategy in strategies:
+                if strategy in fixed_strategies:
+                    fixed[(n, strategy)] = select_labels(
+                        pool_x,
+                        n,
+                        strategy=strategy,
+                        scores=pool_scores,
+                        seed=args.seed,
+                    )
+
+        results[family] = {n: {strategy: [] for strategy in strategies} for n in BUDGETS}
+        for seed_offset in range(args.seeds):
+            run_seed = args.seed + seed_offset
+            rng = np.random.default_rng(run_seed)
             for n in BUDGETS:
-                # random: balanced N/2 attack + N/2 benign from the pool
-                take_r = np.concatenate(
-                    [
-                        rng.choice(pool_atk, n // 2, replace=False),
-                        rng.choice(select_ben, n // 2, replace=False),
-                    ]
-                )
-                # active: the N most-uncertain pool flows (natural class mix)
-                take_a = ranked_pool[:n]
-                for strategy, take in (("random", take_r), ("active", take_a)):
+                for strategy in strategies:
+                    if strategy == "random":
+                        # Historical upper bound: balanced with hidden ground
+                        # truth. This is not deployable and is labelled oracle.
+                        n_attack = n // 2
+                        take = np.concatenate(
+                            [
+                                rng.choice(pool_atk, n_attack, replace=False),
+                                rng.choice(select_ben, n - n_attack, replace=False),
+                            ]
+                        )
+                    else:
+                        relative = fixed.get((n, strategy))
+                        if relative is None:
+                            relative = select_labels(
+                                pool_x,
+                                n,
+                                strategy=strategy,
+                                scores=pool_scores,
+                                seed=run_seed,
+                            )
+                        take = pool_all[relative]
                     x_tr = np.vstack([src_x, target_all[take]])
                     y_tr = np.concatenate([y17a, y18a[take]])
-                    model = _fit(x_tr, y_tr, args.seed + seed)
+                    model = _fit(x_tr, y_tr, run_seed)
                     results[family][n][strategy].append(
                         _recall_at_fpr(
                             _scores(model, x_test), y_test, _scores(model, cal), args.alpha
@@ -138,15 +191,43 @@ def main() -> None:
         print(f"[{family}] done (baseline recall {baseline_recall[family]:.3f})", flush=True)
 
     print(f"\nRecall @ {args.alpha:.0%} FPR, mean +/- std over {args.seeds} seeds")
-    print(f"{'family':<12}{'N':>5}{'random':>16}{'active':>16}")
-    for family in DAYS:
-        print(f"{family:<12}{'base':>5}{baseline_recall[family]:>16.3f}")
+    if "random" in strategies:
+        print("random = balanced oracle (uses hidden labels); all other strategies are deployable")
+    labels = {"random": "random(oracle)"}
+    print(f"{'family':<12}{'N':>5}" + "".join(f"{labels.get(s, s):>20}" for s in strategies))
+    for family in families:
+        print(f"{family:<12}{'base':>5}{baseline_recall[family]:>20.3f}")
         for n in BUDGETS:
-            r = results[family][n]["random"]
-            a = results[family][n]["active"]
-            rs = f"{np.mean(r):.3f}+/-{np.std(r):.3f}"
-            as_ = f"{np.mean(a):.3f}+/-{np.std(a):.3f}"
-            print(f"{family:<12}{n:>5}{rs:>16}{as_:>16}")
+            formatted = []
+            for strategy in strategies:
+                measurements = results[family][n][strategy]
+                formatted.append(f"{np.mean(measurements):.3f}+/-{np.std(measurements):.3f}")
+            print(f"{family:<12}{n:>5}" + "".join(f"{value:>20}" for value in formatted))
+
+        deployable = [strategy for strategy in strategies if strategy != "random"] or strategies
+        for n in (25, 50):
+            winner = max(
+                deployable,
+                key=lambda strategy: float(np.mean(results[family][n][strategy])),
+            )
+            mean = float(np.mean(results[family][n][winner]))
+            print(f"[{family}] deployable winner @ N={n}: {winner} ({mean:.3f})")
+
+    if "random-blind" in strategies:
+        print("\nAcceptance audit (>1 pooled std over random-blind at N <= 50):")
+        for strategy in strategies:
+            if strategy in {"random", "random-blind"}:
+                continue
+            wins: list[str] = []
+            for family in families:
+                for n in (10, 25, 50):
+                    candidate = np.asarray(results[family][n][strategy])
+                    blind = np.asarray(results[family][n]["random-blind"])
+                    pooled_std = float(np.sqrt((candidate.var() + blind.var()) / 2.0))
+                    if float(candidate.mean() - blind.mean()) > pooled_std:
+                        wins.append(f"{family}@{n}")
+                        break
+            print(f"{strategy}: {', '.join(wins) if wins else 'no qualifying family'}")
 
 
 if __name__ == "__main__":

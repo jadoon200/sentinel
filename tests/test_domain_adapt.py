@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.model_selection import train_test_split
 
 from sentinel.ids.domain_adapt import (
@@ -8,6 +9,7 @@ from sentinel.ids.domain_adapt import (
     feature_shift,
     few_shot_training_set,
     quantile_map,
+    select_labels,
     stable_features,
 )
 from sentinel.ids.train import DEFAULT_PARAMS, train_lightgbm
@@ -113,6 +115,82 @@ def test_quantile_map_recovers_affine_target_units() -> None:
     mapped = quantile_map(source, source_benign, target_benign)
 
     assert np.allclose(mapped, source.to_numpy() * 3.0 + 7.0)
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    ["random", "random-blind", "active", "coreset", "cluster", "stratified"],
+)
+def test_select_labels_is_deterministic_and_unique(strategy: str) -> None:
+    rng = np.random.default_rng(13)
+    pool = rng.normal(size=(300, 6))
+    scores = np.linspace(0.0, 1.0, len(pool))
+
+    first = select_labels(pool, 20, strategy=strategy, scores=scores, seed=17)
+    second = select_labels(pool, 20, strategy=strategy, scores=scores, seed=17)
+
+    assert np.array_equal(first, second)
+    assert len(first) == len(np.unique(first)) == 20
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    ["random", "random-blind", "active", "coreset", "cluster", "stratified"],
+)
+def test_select_labels_handles_zero_and_oversized_budgets(strategy: str) -> None:
+    pool = np.arange(60, dtype=np.float64).reshape(20, 3)
+
+    assert select_labels(pool, 0, strategy=strategy).dtype == np.intp
+    assert len(select_labels(pool, 0, strategy=strategy)) == 0
+    assert np.array_equal(select_labels(pool, 30, strategy=strategy), np.arange(len(pool)))
+
+
+def test_coreset_covers_clusters_and_far_outlier() -> None:
+    rng = np.random.default_rng(13)
+    clusters = [
+        rng.normal((-10.0, 0.0), 0.2, size=(30, 2)),
+        rng.normal((0.0, 0.0), 0.2, size=(30, 2)),
+        rng.normal((10.0, 0.0), 0.2, size=(30, 2)),
+    ]
+    pool = np.vstack([*clusters, np.array([[0.0, 25.0]])])
+    groups = np.r_[np.repeat(np.arange(3), 30), 3]
+
+    selected = select_labels(pool, 4, strategy="coreset")
+
+    assert set(groups[selected]) == {0, 1, 2, 3}
+
+
+def test_cluster_selects_one_representative_per_blob() -> None:
+    rng = np.random.default_rng(13)
+    clusters = [
+        rng.normal((-10.0, -10.0), 0.1, size=(40, 2)),
+        rng.normal((0.0, 10.0), 0.1, size=(40, 2)),
+        rng.normal((10.0, -10.0), 0.1, size=(40, 2)),
+    ]
+    pool = np.vstack(clusters)
+    groups = np.repeat(np.arange(3), 40)
+
+    selected = select_labels(pool, 3, strategy="cluster")
+
+    assert set(groups[selected]) == {0, 1, 2}
+
+
+def test_stratified_selection_covers_every_score_decile() -> None:
+    pool = np.arange(400, dtype=np.float64).reshape(100, 4)
+    scores = np.linspace(0.0, 1.0, len(pool))
+
+    selected = select_labels(pool, 20, strategy="stratified", scores=scores)
+
+    assert set(selected // 10) == set(range(10))
+
+
+def test_score_based_selection_requires_aligned_scores() -> None:
+    pool = np.ones((20, 3), dtype=np.float64)
+
+    with pytest.raises(ValueError, match="requires source-model scores"):
+        select_labels(pool, 5, strategy="stratified")
+    with pytest.raises(ValueError, match="one value per pool row"):
+        select_labels(pool, 5, strategy="active", scores=np.ones(10))
 
 
 def test_coral_matches_target_covariance() -> None:

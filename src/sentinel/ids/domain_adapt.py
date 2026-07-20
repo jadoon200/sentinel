@@ -11,9 +11,15 @@ assumed:
   using only unlabelled feature distributions.
 - `feature_shift` / `stable_features` — rank features by how much their benign
   distribution moved between networks, keep the transfer-stable ones.
+- `BenignQuantileTransform` — represent each flow feature by its percentile
+  relative to the local benign population, so source and target networks share
+  a distribution-free feature scale.
+- `quantile_map` — transport source features into the target network's units by
+  composing the source benign ECDF with the target benign inverse ECDF.
 
-Both need only target *benign* traffic — which any defender has on their own
-network — so they stay within the project's label-free, zero-cost rules.
+These methods need only target *benign* traffic — which any defender has on
+their own network — so they stay within the project's label-free, zero-cost
+rules.
 """
 
 import numpy as np
@@ -23,6 +29,128 @@ from numpy.typing import NDArray
 
 def _impute(values: NDArray[np.float64], medians: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.where(np.isnan(values), medians, values)
+
+
+class BenignQuantileTransform:
+    """Map features to their midpoint-rank ECDF under a benign reference sample.
+
+    NaNs are replaced with the corresponding benign median before ranking. A
+    constant (including all-NaN) benign feature contains no rank information, so
+    it maps to 0.5 for every input. Values outside the fitted benign range clamp
+    naturally to 0 or 1.
+
+    The transform is monotone within each feature: it preserves each feature's
+    ordering while replacing incompatible cross-network units with a local
+    benign-relative scale in ``[0, 1]``.
+    """
+
+    def __init__(self) -> None:
+        self._n_features: int | None = None
+        self._medians: NDArray[np.float64] | None = None
+        self._sorted: list[NDArray[np.float64]] | None = None
+        self._constant: NDArray[np.bool_] | None = None
+
+    def fit(self, benign: pd.DataFrame) -> "BenignQuantileTransform":
+        """Fit per-feature benign medians and sorted ECDF reference values."""
+        values = benign.to_numpy(dtype=np.float64)
+        if values.ndim != 2 or len(values) == 0:
+            raise ValueError("benign reference must contain at least one row")
+
+        n_features = values.shape[1]
+        medians = np.empty(n_features, dtype=np.float64)
+        sorted_columns: list[NDArray[np.float64]] = []
+        constant = np.empty(n_features, dtype=np.bool_)
+
+        for feature in range(n_features):
+            column = values[:, feature]
+            observed = column[~np.isnan(column)]
+            # An all-NaN benign feature has no information. Giving it a finite
+            # sentinel lets it follow the same constant-feature path without
+            # emitting np.nanmedian's all-NaN warning.
+            median = float(np.median(observed)) if len(observed) else 0.0
+            fitted = np.sort(np.where(np.isnan(column), median, column))
+            medians[feature] = median
+            sorted_columns.append(fitted)
+            constant[feature] = bool(fitted[0] == fitted[-1])
+
+        self._n_features = n_features
+        self._medians = medians
+        self._sorted = sorted_columns
+        self._constant = constant
+        return self
+
+    def transform(self, x: pd.DataFrame) -> NDArray[np.float64]:
+        """Return midpoint-rank benign ECDF values for ``x``."""
+        n_features, medians, sorted_columns, constant = self._fitted_state()
+        values = x.to_numpy(dtype=np.float64)
+        if values.ndim != 2 or values.shape[1] != n_features:
+            raise ValueError(f"expected {n_features} features, got {values.shape[1]}")
+
+        result = np.empty(values.shape, dtype=np.float64)
+        for feature, reference in enumerate(sorted_columns):
+            if constant[feature]:
+                result[:, feature] = 0.5
+                continue
+            column = np.where(np.isnan(values[:, feature]), medians[feature], values[:, feature])
+            left = np.searchsorted(reference, column, side="left")
+            right = np.searchsorted(reference, column, side="right")
+            result[:, feature] = (left + right) / (2.0 * len(reference))
+        return result
+
+    def _inverse(self, quantiles: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map quantiles back through the fitted benign empirical distribution."""
+        n_features, _, sorted_columns, _ = self._fitted_state()
+        if quantiles.ndim != 2 or quantiles.shape[1] != n_features:
+            raise ValueError(f"expected {n_features} quantile features, got {quantiles.shape[1]}")
+
+        result = np.empty(quantiles.shape, dtype=np.float64)
+        for feature, reference in enumerate(sorted_columns):
+            midpoint_ranks = (np.arange(len(reference), dtype=np.float64) + 0.5) / len(reference)
+            result[:, feature] = np.interp(
+                quantiles[:, feature],
+                midpoint_ranks,
+                reference,
+                left=reference[0],
+                right=reference[-1],
+            )
+        return result
+
+    def _fitted_state(
+        self,
+    ) -> tuple[
+        int,
+        NDArray[np.float64],
+        list[NDArray[np.float64]],
+        NDArray[np.bool_],
+    ]:
+        if (
+            self._n_features is None
+            or self._medians is None
+            or self._sorted is None
+            or self._constant is None
+        ):
+            raise ValueError("transform must be fitted before use")
+        return self._n_features, self._medians, self._sorted, self._constant
+
+
+def quantile_map(
+    source: pd.DataFrame,
+    source_benign: pd.DataFrame,
+    target_benign: pd.DataFrame,
+) -> NDArray[np.float64]:
+    """Transport source features into target units through their benign ECDFs.
+
+    For each feature, this computes ``Q_target(ECDF_source(value))`` using
+    linear interpolation over the sorted target benign values. The map is
+    monotone per feature, so within-feature ranking is preserved while only the
+    cross-feature scale changes. NaN medians are fitted independently on the
+    two benign reference samples.
+    """
+    if source.shape[1] != source_benign.shape[1] or source.shape[1] != target_benign.shape[1]:
+        raise ValueError("source and benign references must have the same feature count")
+    source_transform = BenignQuantileTransform().fit(source_benign)
+    target_transform = BenignQuantileTransform().fit(target_benign)
+    return target_transform._inverse(source_transform.transform(source))
 
 
 def _matrix_power_psd(matrix: NDArray[np.float64], power: float) -> NDArray[np.float64]:

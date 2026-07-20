@@ -96,6 +96,7 @@ const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
   ["CORAL covariance alignment", "0.000", "0.56", "bad"],
   ["transfer-stable features", "0.000", "0.01", "bad"],
   ["target-trained autoencoder", "0.000", "0.81", "mid"],
+  ["benign quantile space", "0.502", "0.989", "mid"],
   ["few-shot: +50 labelled flows", "0.99997", "0.99994", "good"],
 ];
 
@@ -126,7 +127,7 @@ export function ReportCard() {
       <MapperTryIt />
 
       <section className="panel">
-        <h2>Can we beat the transfer failure? Four fixes, measured</h2>
+        <h2>Can we beat the transfer failure? Five fixes, measured</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           recall at a target-calibrated 1% false-positive rate, 2017 → 2018
         </p>
@@ -141,9 +142,10 @@ export function ReportCard() {
           </div>
         ))}
         <p style={{ marginBottom: 8 }}>
-          The clever label-free tricks <b>failed</b> — alignment collapsed the model to chance,
-          feature pruning made it worse, and a target-trained autoencoder couldn't clear a usable
-          threshold either. What works: <b style={{ color: "var(--good)" }}>50 labelled flows</b>{" "}
+          None of the label-free tricks generalizes. Benign quantile space narrows brute-force to
+          0.502 mean recall, but it is seed-sensitive (±0.355) and falls to 0.033 on DoS / 0.001 on
+          Bot; alignment, feature pruning, and the target-trained autoencoder also fail across
+          families. What works consistently: <b style={{ color: "var(--good)" }}>50 labelled flows</b>{" "}
           from the target network, verified on held-out data across three different attack families.
         </p>
         <div className="xfam">

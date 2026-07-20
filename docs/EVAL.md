@@ -554,17 +554,51 @@ for target-domain adaptation across *different* networks. Cross-network
 transfer needs labels or feature adaptation — recalibration alone is not
 enough, and the project says so because it ran the test.
 
-### Can we beat it? Four fixes, measured (`scripts/eval_domain_adapt.py`)
+### Can we beat it? Five fixes, measured (`scripts/eval_domain_adapt.py`)
 
-Recall at a target-benign-calibrated 1% FPR, 2017 -> 2018:
+Recall at a target-benign-calibrated 1% FPR, 2017 → 2018. The quantile rows
+are mean ± standard deviation over three complete split/refit runs (seeds
+13–15); the other rows are the seed-13 controls. This is the full-data
+domain-adaptation harness, so its single-seed controls need not exactly match
+the separately sampled cross-family study below. For the quantile rows, the
+target transform and raw-imputation medians fit on adaptation-pool benign flows
+only. The legacy controls' shared imputation median fits on the whole disjoint
+pool (including attacks), while thresholds fit on calibration-pool benign
+flows. Held-out test flows are transformed and scored, never used to fit any
+of these statistics.
 
-| Fix | recall | AUC | verdict |
-|---|---|---|---|
-| baseline (train 2017) | 0.000 | 0.927 | the failure |
-| CORAL covariance alignment | 0.000 | 0.500 | collapsed ranking to chance |
-| transfer-stable features | 0.000 | 0.343 | pruning hurt — inverted |
-| target-trained autoencoder | 0.000 | 0.827 | ranks better, can't separate |
-| **few-shot: +50 labelled 2018 flows** | **0.99997** | **0.99994** | recovers near-perfect detection |
+| Family | Fix | recall | FPR | AUC |
+|---|---|---:|---:|---:|
+| brute-force | baseline (train 2017) | 0.000 | 0.002 | 0.927 |
+| brute-force | CORAL covariance alignment | 0.000 | 0.000 | 0.555 |
+| brute-force | transfer-stable features | 0.000 | 0.007 | 0.009 |
+| brute-force | target-trained autoencoder | 0.000 | 0.010 | 0.718 |
+| brute-force | quantile map (source → target transport) | 0.169 ± 0.239 | 0.003 ± 0.004 | 0.525 ± 0.171 |
+| brute-force | **benign quantile space** | **0.502 ± 0.355** | **0.005 ± 0.001** | **0.989 ± 0.006** |
+| brute-force | **few-shot: +50 labelled 2018 flows** | **1.000** | **0.005** | **1.000** |
+| DoS | baseline (train 2017) | 0.016 | 0.005 | 0.597 |
+| DoS | CORAL covariance alignment | 0.087 | 0.002 | 0.543 |
+| DoS | transfer-stable features | 0.000 | 0.000 | 0.541 |
+| DoS | target-trained autoencoder | 0.061 | 0.010 | 0.910 |
+| DoS | quantile map (source → target transport) | 0.000 ± 0.000 | 0.005 ± 0.004 | 0.454 ± 0.050 |
+| DoS | benign quantile space | 0.033 ± 0.022 | 0.005 ± 0.001 | 0.523 ± 0.055 |
+| DoS | **few-shot: +50 labelled 2018 flows** | **0.839** | **0.001** | **0.995** |
+| Bot | baseline (train 2017) | 0.000 | 0.004 | 0.684 |
+| Bot | CORAL covariance alignment | 0.000 | 0.000 | 0.712 |
+| Bot | transfer-stable features | 0.000 | 0.009 | 0.284 |
+| Bot | target-trained autoencoder | 0.001 | 0.010 | 0.244 |
+| Bot | quantile map (source → target transport) | 0.000 ± 0.000 | 0.008 ± 0.002 | 0.242 ± 0.050 |
+| Bot | benign quantile space | 0.001 ± 0.001 | 0.007 ± 0.001 | 0.635 ± 0.051 |
+| Bot | **few-shot: +50 labelled 2018 flows** | **0.993** | **0.010** | **0.998** |
+
+The fifth approach is **benign quantile alignment**: represent each feature by
+its percentile against that network's own benign traffic. Its symmetric
+quantile-space variant barely clears the pre-registered 0.5 brute-force gate,
+but the 0.355 standard deviation makes that result seed-sensitive. More
+importantly, the promotion check fails on DoS (0.033) and Bot (0.001).
+Source-to-target quantile transport is weaker still. This is a useful partial —
+per-feature rank normalization can narrow one shifted boundary — not the first
+general working label-free transfer fix.
 
 Methodology note (this matters): the few-shot labels and the test set are a
 **disjoint split of the 2018 day** — the model is graded only on flows it
@@ -594,29 +628,30 @@ the 1.000 was re-audited beyond the index-disjoint split:
   The representative few-shot numbers are DoS 0.955 and Bot ~0.99, whose test
   sets share almost none of brute-force's duplication artifact (0% / 4.7%
   attack-row overlap with the few-shot pool).
-- **Minor pre-split leak, fixed:** NaN-fill medians were computed over the
+- **Minor pre-split leak, fixed in this harness:** NaN-fill medians were computed over the
   whole 2018 day (pool + test) before splitting. One scalar per feature over
-  ~1M rows — no material effect (numbers reproduce identically) — but both
-  eval scripts now compute fill medians from the pool only.
+  ~1M rows — no material effect (numbers reproduce identically) — but the
+  domain-adaptation eval now computes fill medians from the pool only.
 
-The label-free methods *failed*: CORAL alignment washed out the small
-brute-force signal (AUC 0.56), transfer-stable feature selection removed the
-discriminative features (AUC 0.01), and the target-trained autoencoder ranked
-better (0.81) but could not clear a usable operating point. Only **few-shot**
-worked — 50 labelled target flows recover 0.99997 recall on held-out traffic
-(exact, unrounded: 228,562 of 228,569 attacks alerted, 7 missed; AUC 0.9999436 —
-earlier drafts printed these at 3 dp as "1.000", which oversold a near-perfect
-score as a perfect one).
+None of the label-free methods is a general fix. CORAL and transfer-stable
+feature selection remain failures; the target-trained autoencoder can rank
+some attacks but cannot reliably clear a usable operating point. Quantile
+space is the one narrow exception: it recovers a seed-sensitive mean recall of
+0.502 on brute-force, then falls back to 0.033 on DoS and 0.001 on Bot. Only
+**few-shot** works consistently across all three families. In the previously
+audited brute-force run, 50 labelled target flows recovered 0.99997 recall on
+held-out traffic (exact, unrounded: 228,562 of 228,569 attacks alerted, 7
+missed; AUC 0.9999436 — earlier drafts printed these at 3 dp as "1.000",
+which oversold a near-perfect score as a perfect one).
 
 Why so clean? Not overfitting: FTP/SSH brute-force is intrinsically separable
 *once the model has in-domain labels*. The 2017->2018 failure is a
 boundary-placement problem (the 2017 boundary lands wrong on 2018's feature
 scale); a few target labels re-anchor it. The honest, useful conclusion:
 cross-network IDS transfer is a few-shot labelling problem, not a
-representation-alignment one. **Open caveat:** this tests few-shot on the
-*same* attack family it is evaluated on; whether labelling one family helps
-detect a *different* one on the target network is the next stress test, not
-yet run.
+generally solved representation-alignment problem. The next section tests the
+same few-shot recipe across three target attack families rather than trusting
+the especially easy brute-force case.
 
 ### Cross-family stress test: few-shot is the fix (`scripts/eval_cross_family.py`)
 
@@ -638,8 +673,9 @@ Two results, both kept honest:
 
 - **The label-free autoencoder does not work.** The hypothesis that a benign-
   only AE trained on target traffic would catch volumetric DoS was *wrong* — it
-  ranks DoS reasonably (AUC 0.84) but, like every label-free method here, can't
-  clear a usable threshold (recall 0.001). On Bot it is worse than chance.
+  ranks DoS reasonably (AUC 0.84) but cannot clear a usable threshold (recall
+  0.001). On Bot it is worse than chance; the quantile study above likewise
+  produces only a narrow brute-force partial, not a cross-family fix.
 - **Few-shot is the fix, and it is robust.** 50 labelled flows of a family
   recover 0.95-0.99 recall on the new network across all three families —
   including Bot, whose 2017 baseline ranks *worse than a coin flip* (AUC 0.40)
@@ -647,9 +683,11 @@ Two results, both kept honest:
   a single family; it holds for three distinct attack types on held-out data.
 
 **Conclusion.** Cross-network IDS transfer is a few-shot labelling problem. No
-label-free transform (CORAL, feature selection, target-trained autoencoder)
-recovered detection, but ~50 labelled target flows per family do. The
-practical recipe falls out of the ensemble: the unsupervised detectors
+tested label-free transform generalizes: quantile space narrows the gap only
+for brute-force and is highly seed-sensitive, while CORAL, feature selection,
+quantile transport, and the target-trained autoencoder do not recover a usable
+operating point across families. About 50 labelled target flows per family do.
+The practical recipe falls out of the ensemble: the unsupervised detectors
 (host-profile fan-out, sequence model) surface candidate attacks on the new
 network, an analyst confirms ~50, and the supervised model adapts to near-
 perfect recall. A handful of labels goes remarkably far. Together they are the project's thesis: *report the number that

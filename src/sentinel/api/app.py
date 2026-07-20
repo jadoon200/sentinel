@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from threading import Lock, Semaphore
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,9 @@ from sentinel.db.base import get_session_factory
 from sentinel.db.models import (
     Alert,
     AttackTechnique,
+    CalibrationBatch,
+    CalibrationFlow,
+    CalibrationRun,
     Campaign,
     CampaignReport,
     CampaignTechnique,
@@ -49,6 +52,10 @@ _MAX_REQUEST_CHARS = _settings.api_max_request_chars
 
 _rate_limiter = RateLimiter(
     _settings.api_rate_limit_requests, _settings.api_rate_limit_window_seconds
+)
+_calibration_rate_limiter = RateLimiter(
+    _settings.api_calibration_rate_limit_requests,
+    _settings.api_rate_limit_window_seconds,
 )
 _inference_sem = Semaphore(_settings.api_inference_concurrency)
 _INFERENCE_TIMEOUT = _settings.api_inference_acquire_timeout_seconds
@@ -161,6 +168,20 @@ def _get_mapper(session: Session) -> Any:
                     lexical=True,  # hybrid retrieval, matching the tagging pipeline
                 )
     return _mapper
+
+
+def _get_calibration_pack() -> Any:
+    """Lazy-load the optional ML pack without pulling ML deps into the slim API."""
+    from sentinel.ids.calibrate import load_pack
+
+    return load_pack(_settings.calibration_pack_path)
+
+
+def _guard_calibration(request: Request) -> None:
+    if not _settings.api_enable_calibration:
+        raise HTTPException(status_code=404, detail="calibration workflow is disabled")
+    if not _calibration_rate_limiter.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail="calibration rate limit exceeded")
 
 
 class Stats(BaseModel):
@@ -810,6 +831,307 @@ class MappedTechnique(BaseModel):
     corroborations: int
     tactics: list[str]
     url: str | None
+
+
+CalibrationStrategy = Literal[
+    "random", "random-blind", "active", "coreset", "cluster", "stratified"
+]
+CalibrationLabel = Literal["benign", "attack"]
+
+
+class CalibrationBatchCreate(BaseModel):
+    n: int = Field(default=50, ge=1, le=200)
+    strategy: CalibrationStrategy = "stratified"
+    seed: int = 13
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class CalibrationLabelRequest(BaseModel):
+    label: CalibrationLabel
+
+
+class CalibrationFlowResponse(BaseModel):
+    id: int
+    pool_row: int
+    features: dict[str, float]
+    model_score: float
+    operator_label: str | None
+    true_label: str | None = None
+    labelled_at: datetime | None
+
+
+class CalibrationRunResponse(BaseModel):
+    id: int
+    created_at: datetime
+    recall_before: float
+    recall_after: float
+    fpr_after: float
+    auc_after: float
+    n_labels_used: int
+    operator_accuracy: float
+    metrics: dict[str, Any]
+
+
+class CalibrationBatchResponse(BaseModel):
+    id: int
+    created_at: datetime
+    strategy: str
+    seed: int
+    n_flows: int
+    n_labelled: int
+    status: str
+    notes: str | None
+    flows: list[CalibrationFlowResponse]
+    runs: list[CalibrationRunResponse]
+
+
+class CalibrationCurveResponse(BaseModel):
+    strategy: str
+    points: list[dict[str, Any]]
+
+
+def _flow_response(flow: CalibrationFlow) -> CalibrationFlowResponse:
+    # Truth is withheld for unseen rows. Once the operator commits a label it
+    # is safe to reveal for immediate training feedback and later review.
+    revealed = flow.true_label if flow.operator_label is not None else None
+    return CalibrationFlowResponse(
+        id=flow.id,
+        pool_row=flow.pool_row,
+        features=flow.features,
+        model_score=flow.model_score,
+        operator_label=flow.operator_label,
+        true_label=revealed,
+        labelled_at=flow.labelled_at,
+    )
+
+
+def _run_response(run: CalibrationRun) -> CalibrationRunResponse:
+    return CalibrationRunResponse(
+        id=run.id,
+        created_at=run.created_at,
+        recall_before=run.recall_before,
+        recall_after=run.recall_after,
+        fpr_after=run.fpr_after,
+        auc_after=run.auc_after,
+        n_labels_used=run.n_labels_used,
+        operator_accuracy=run.operator_accuracy,
+        metrics=run.metrics,
+    )
+
+
+def _batch_response(session: Session, batch: CalibrationBatch) -> CalibrationBatchResponse:
+    flows = list(
+        session.scalars(
+            select(CalibrationFlow)
+            .where(CalibrationFlow.batch_id == batch.id)
+            .order_by(CalibrationFlow.id)
+        )
+    )
+    runs = list(
+        session.scalars(
+            select(CalibrationRun)
+            .where(CalibrationRun.batch_id == batch.id)
+            .order_by(CalibrationRun.id.desc())
+        )
+    )
+    return CalibrationBatchResponse(
+        id=batch.id,
+        created_at=batch.created_at,
+        strategy=batch.strategy,
+        seed=batch.seed,
+        n_flows=batch.n_flows,
+        n_labelled=sum(flow.operator_label is not None for flow in flows),
+        status=batch.status,
+        notes=batch.notes,
+        flows=[_flow_response(flow) for flow in flows],
+        runs=[_run_response(run) for run in runs],
+    )
+
+
+def _label_flow(
+    flow_id: int,
+    label: CalibrationLabel,
+    session: Session,
+) -> CalibrationFlowResponse:
+    flow = session.get(CalibrationFlow, flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="calibration flow not found")
+    flow.operator_label = label
+    flow.labelled_at = datetime.now().astimezone()
+    labelled = session.scalar(
+        select(func.count())
+        .select_from(CalibrationFlow)
+        .where(
+            CalibrationFlow.batch_id == flow.batch_id,
+            CalibrationFlow.operator_label.is_not(None),
+        )
+    )
+    batch = session.get(CalibrationBatch, flow.batch_id)
+    if batch is not None and (labelled or 0) >= batch.n_flows:
+        batch.status = "labelled"
+    session.commit()
+    session.refresh(flow)
+    return _flow_response(flow)
+
+
+@app.post(
+    "/calibration/batches",
+    response_model=CalibrationBatchResponse,
+    response_model_exclude_none=True,
+)
+def create_calibration_batch(
+    req: CalibrationBatchCreate,
+    request: Request,
+    session: SessionDep,
+) -> CalibrationBatchResponse:
+    """Sample a blind, reproducible flow-labelling batch from the frozen pack."""
+    _guard_calibration(request)
+    try:
+        from sentinel.ids.calibrate import sample_batch
+
+        pack = _get_calibration_pack()
+        rows = sample_batch(pack, n=req.n, strategy=req.strategy, seed=req.seed)
+    except (FileNotFoundError, ImportError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="calibration pack unavailable") from exc
+
+    batch = CalibrationBatch(
+        strategy=req.strategy,
+        seed=req.seed,
+        n_flows=len(rows),
+        status="open",
+        notes=req.notes,
+    )
+    session.add(batch)
+    session.flush()
+    for row_value in rows:
+        row = int(row_value)
+        features = {name: float(pack.pool_x.iloc[row][name]) for name in pack.feature_names}
+        session.add(
+            CalibrationFlow(
+                batch_id=batch.id,
+                pool_row=row,
+                features=features,
+                model_score=float(pack.pool_scores[row]),
+                true_label="attack" if int(pack.pool_y[row]) == 1 else "benign",
+            )
+        )
+    session.commit()
+    session.refresh(batch)
+    return _batch_response(session, batch)
+
+
+@app.get(
+    "/calibration/batches/{batch_id}",
+    response_model=CalibrationBatchResponse,
+    response_model_exclude_none=True,
+)
+def get_calibration_batch(
+    batch_id: int, request: Request, session: SessionDep
+) -> CalibrationBatchResponse:
+    _guard_calibration(request)
+    batch = session.get(CalibrationBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="calibration batch not found")
+    return _batch_response(session, batch)
+
+
+@app.post(
+    "/calibration/flows/{flow_id}/label",
+    response_model=CalibrationFlowResponse,
+    response_model_exclude_none=True,
+)
+def label_calibration_flow(
+    flow_id: int,
+    req: CalibrationLabelRequest,
+    request: Request,
+    session: SessionDep,
+) -> CalibrationFlowResponse:
+    """Commit or replace one operator label, then reveal that row's truth."""
+    _guard_calibration(request)
+    return _label_flow(flow_id, req.label, session)
+
+
+@app.post(
+    "/calibration/flows/{flow_id}/simulate-label",
+    response_model=CalibrationFlowResponse,
+    response_model_exclude_none=True,
+)
+def simulate_calibration_label(
+    flow_id: int, request: Request, session: SessionDep
+) -> CalibrationFlowResponse:
+    """Demo-only shortcut: apply the pack's hidden truth as the operator label."""
+    _guard_calibration(request)
+    flow = session.get(CalibrationFlow, flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="calibration flow not found")
+    label: CalibrationLabel = "attack" if flow.true_label == "attack" else "benign"
+    return _label_flow(flow_id, label, session)
+
+
+@app.post(
+    "/calibration/batches/{batch_id}/retrain",
+    response_model=CalibrationRunResponse,
+)
+def retrain_calibration_batch(
+    batch_id: int, request: Request, session: SessionDep
+) -> CalibrationRunResponse:
+    """Fit source plus operator labels and grade once on the held-out target test."""
+    _guard_calibration(request)
+    batch = session.get(CalibrationBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="calibration batch not found")
+    flows = list(
+        session.scalars(
+            select(CalibrationFlow).where(
+                CalibrationFlow.batch_id == batch.id,
+                CalibrationFlow.operator_label.is_not(None),
+            )
+        )
+    )
+    if not flows:
+        raise HTTPException(status_code=422, detail="label at least one flow before retraining")
+
+    if not _inference_sem.acquire(timeout=_INFERENCE_TIMEOUT):
+        raise HTTPException(status_code=503, detail="calibration worker busy, try again shortly")
+    try:
+        from sentinel.ids.calibrate import retrain
+
+        pack = _get_calibration_pack()
+        labelled = [(flow.pool_row, 1 if flow.operator_label == "attack" else 0) for flow in flows]
+        metrics = retrain(pack, labelled, seed=batch.seed)
+    except (FileNotFoundError, ImportError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="calibration worker unavailable") from exc
+    except (IndexError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        _inference_sem.release()
+
+    run = CalibrationRun(
+        batch_id=batch.id,
+        recall_before=metrics.recall_before,
+        recall_after=metrics.recall_after,
+        fpr_after=metrics.fpr_after,
+        auc_after=metrics.auc_after,
+        n_labels_used=metrics.n_labels_used,
+        operator_accuracy=metrics.operator_accuracy,
+        metrics=metrics.details(),
+    )
+    batch.status = "retrained"
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return _run_response(run)
+
+
+@app.get("/calibration/curve", response_model=CalibrationCurveResponse)
+def calibration_curve(request: Request) -> CalibrationCurveResponse:
+    """Return the recorded multi-seed WS3 reference curve for context."""
+    _guard_calibration(request)
+    try:
+        from sentinel.ids.calibrate import LABEL_EFFICIENCY_CURVE
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="calibration workflow unavailable") from exc
+    return CalibrationCurveResponse(strategy="stratified", points=LABEL_EFFICIENCY_CURVE)
 
 
 @app.post("/map-techniques")

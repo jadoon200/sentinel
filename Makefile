@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon eval-beacon-ctu13 sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency eval-conformal eval-conformal-cross migrate
+.PHONY: env install lock lint typecheck test check up down ingest enrich train train-anomaly replay ids-spectral ids-beacon eval-beacon-ctu13 sqli waf-replay api ui briefing refresh eval-ensemble eval-cross eval-domain eval-cross-family eval-label-efficiency eval-conformal eval-conformal-cross build-calibration-pack migrate
 
 # One-time: create the conda env, then `conda activate sentinel`
 env:
@@ -88,6 +88,10 @@ eval-cross-family:
 # Label-efficiency curve: how few target labels suffice, random vs active selection
 eval-label-efficiency:
 	python scripts/eval_label_efficiency.py
+
+# Freeze the local source/pool/calibration/test pack used by the calibration demo
+build-calibration-pack:
+	python scripts/build_calibration_pack.py
 
 # Domain-adaptation study: can we beat the 2017->2018 transfer failure?
 eval-domain:

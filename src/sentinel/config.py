@@ -128,6 +128,15 @@ class Settings(BaseSettings):
     # Warm the technique mapper in a background thread at startup so the first
     # public request doesn't pay the ~20s model load (off in dev/tests).
     api_warm_model: bool = False
+    # Optional few-shot calibration demo. Disabled by default so the knowledge-
+    # graph API remains read-only unless an operator explicitly opts in. The
+    # pack is generated locally by scripts/build_calibration_pack.py.
+    api_enable_calibration: bool = False
+    calibration_pack_path: Path = Path("data/calibration-pack")
+    # A 50-flow labelling loop legitimately makes >30 requests in a minute, so
+    # calibration has its own bounded per-client quota rather than sharing the
+    # heavier mapper route's lower default.
+    api_calibration_rate_limit_requests: int = 120
     # Directory of the built React dashboard to serve from the API's own origin
     # (the single-service cloud image sets this to the baked-in dist). Empty in
     # dev/tests, where the Vite dev server runs separately; when set, the SPA and

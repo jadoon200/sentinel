@@ -127,6 +127,14 @@ def test_full_label_relabel_simulate_and_retrain_workflow(
     assert len(refreshed["runs"]) == 1
     assert calibration_client.get("/calibration/curve").status_code == 200
 
+    # Relabelling after a retrain must not demote the batch back to "labelled".
+    relabel_after_run = calibration_client.post(
+        f"/calibration/flows/{first['id']}/label", json={"label": "attack"}
+    )
+    assert relabel_after_run.status_code == 200
+    still = calibration_client.get(f"/calibration/batches/{batch['id']}").json()
+    assert still["status"] == "retrained"
+
 
 def test_retrain_rejects_batch_with_zero_labels(calibration_client: TestClient) -> None:
     batch = calibration_client.post("/calibration/batches", json={"n": 4}).json()
@@ -137,3 +145,21 @@ def test_retrain_rejects_batch_with_zero_labels(calibration_client: TestClient) 
 def test_create_validates_batch_size(calibration_client: TestClient) -> None:
     assert calibration_client.post("/calibration/batches", json={"n": 0}).status_code == 422
     assert calibration_client.post("/calibration/batches", json={"n": 201}).status_code == 422
+
+
+def test_create_rejects_negative_seed(calibration_client: TestClient) -> None:
+    response = calibration_client.post("/calibration/batches", json={"n": 4, "seed": -1})
+    assert response.status_code == 422
+
+
+def test_corrupt_pack_is_503_not_500(
+    calibration_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sentinel.api import app as api_app
+
+    def broken_pack() -> CalibrationPack:
+        raise KeyError("baseline")  # stale metadata.json missing a required key
+
+    monkeypatch.setattr(api_app, "_get_calibration_pack", broken_pack)
+    response = calibration_client.post("/calibration/batches", json={"n": 4})
+    assert response.status_code == 503

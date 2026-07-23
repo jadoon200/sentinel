@@ -97,7 +97,7 @@ const fixes: [string, string, string, "bad" | "mid" | "good"][] = [
   ["transfer-stable features", "0.000", "0.01", "bad"],
   ["target-trained autoencoder", "0.000", "0.81", "mid"],
   ["benign quantile space", "0.502", "0.989", "mid"],
-  ["few-shot: +50 labelled flows", "0.99997", "0.99994", "good"],
+  ["few-shot: +50 labelled flows", "0.948 ± 0.103", "0.997 ± 0.005", "good"],
 ];
 
 // SQLi payload detector — F1, within-corpus vs cross-corpus (the honest test).
@@ -135,7 +135,7 @@ export function ReportCard() {
           <div key={name} className="fix-row">
             <span className="fix-name">{name}</span>
             <div className="fix-bar">
-              <div className={`fix-fill fix-${kind}`} style={{ width: `${Number(recall) * 100}%` }} />
+              <div className={`fix-fill fix-${kind}`} style={{ width: `${parseFloat(recall) * 100}%` }} />
             </div>
             <span className={`fix-val fix-${kind}`}>recall {recall}</span>
             <span className="hint">AUC {auc}</span>
@@ -152,7 +152,7 @@ export function ReportCard() {
           {[
             ["DoS", "0.05", "0.96"],
             ["Bot", "0.00", "0.99"],
-            ["Brute-force", "0.00", "0.99996"],
+            ["Brute-force", "0.00", "0.95 avg"],
           ].map(([fam, before, after]) => (
             <div key={fam} className="xfam-row">
               <span className="xfam-name">{fam}</span>
@@ -169,12 +169,18 @@ export function ReportCard() {
           unsupervised detectors surface candidates, an analyst confirms ~50, the model adapts.
         </p>
         <p className="muted" style={{ marginBottom: 8 }}>
-          Why brute-force looks perfect: it is not literally 1.0 — the exact score is 0.99997 (7 of
-          228,569 held-out attacks missed). Audited — the score survives full
-          content-level dedup (so it isn't split leakage), but the family is intrinsically
-          ~one-feature separable in-domain (a decision stump on just the 50 labels reaches AUC
-          0.997). Read DoS 0.96 / Bot 0.99 as the representative few-shot numbers; details in
-          docs/EVAL.md.
+          Why brute-force looks near-perfect — audited twice, and the honest answer is a range,
+          not a point. The best seed reaches 0.99997 (7 of 228,569 held-out attacks missed), but
+          across 5 seeds recall is <b>0.948 ± 0.103</b>, with one seed at 0.742: the ranking is
+          stable (AUC 0.997 ± 0.005), the calibrated threshold is not. It is not split leakage
+          (the score survives full content-level dedup) and not a pipeline bug (scrambled test
+          labels score at chance, AUC 0.499) — but the family is close to one-feature separable
+          in-domain: <code>Fwd Seg Size Min</code> takes exactly one constant value per attack tool
+          (32 for SSH, 40 for FTP) against 8/20 for 99.4% of benign traffic, which reads as a
+          scripted-tool artifact rather than attacker tradecraft. Nor is it a temporal-robustness
+          result: a chronological split holds forward only because that day's two sub-campaigns
+          share that fingerprint, and drops to 0.53 reversed. Read it as “few-shot works, report
+          the range”; details in docs/EVAL.md.
         </p>
         <p className="muted" style={{ marginBottom: 0 }}>
           And the budget is small (measured, 5 seeds): <b>~50 labels reach ≥0.88 recall, ~100 reach

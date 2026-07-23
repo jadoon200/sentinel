@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "../api";
+import { ApiError, api } from "../api";
 
 const SAMPLE =
   "The actor sent a spearphishing email with a malicious Excel attachment. Once macros were " +
@@ -39,7 +39,7 @@ function MapperTryIt() {
       </div>
       {map.error && (
         <p className="error" style={{ padding: "6px 0" }}>
-          {(map.error as Error).message.includes("503")
+          {map.error instanceof ApiError && map.error.status === 503
             ? "The live mapper isn't available on this deployment — the slim demo image doesn't " +
               "ship the SecureBERT model (a deliberate free-tier trade-off, not an outage). Run " +
               "SENTINEL locally to try the mapper on your own text."

@@ -575,7 +575,7 @@ of these statistics.
 | brute-force | target-trained autoencoder | 0.000 | 0.010 | 0.718 |
 | brute-force | quantile map (source → target transport) | 0.169 ± 0.239 | 0.003 ± 0.004 | 0.525 ± 0.171 |
 | brute-force | **benign quantile space** | **0.502 ± 0.355** | **0.005 ± 0.001** | **0.989 ± 0.006** |
-| brute-force | **few-shot: +50 labelled 2018 flows** | **1.000** | **0.005** | **1.000** |
+| brute-force | **few-shot: +50 labelled 2018 flows** | **0.948 ± 0.103** | **0.005** | **0.997 ± 0.005** |
 | DoS | baseline (train 2017) | 0.016 | 0.005 | 0.597 |
 | DoS | CORAL covariance alignment | 0.087 | 0.002 | 0.543 |
 | DoS | transfer-stable features | 0.000 | 0.000 | 0.541 |
@@ -633,16 +633,57 @@ the 1.000 was re-audited beyond the index-disjoint split:
   ~1M rows — no material effect (numbers reproduce identically) — but the
   domain-adaptation eval now computes fill medians from the pool only.
 
+**Second post-hoc audit (2026-07)** — the checks the first audit did *not* run
+(temporal splitting, seed variance, feature ablation, negative controls).
+Verdict: the mechanism is real, but the headline number was not stable and the
+result is narrower than it looked.
+
+- **Seed variance — the important one.** Across seeds 13-17: recall
+  **0.948 ± 0.103** (min 0.742, max 0.99997), AUC **0.997 ± 0.005**. Ranking is
+  stable across seeds; the *calibrated operating threshold* is not — one seed
+  holds AUC 0.988 while losing a quarter of its recall. The published 0.99997
+  was the best of five. Report the range.
+- **Temporal split — survives, but does not mean what it appears to.** Drawing
+  the few-shot labels from the earliest 40% of the day and testing on the latest
+  60% gives recall 1.000 — but that day's attacks are two sequential
+  sub-campaigns (SSH-Bruteforce 02:00-03:30, FTP-BruteForce 10:30-12:00), so a
+  chronological cut trains on one and tests on the other. It holds only because
+  both share a near-identical fingerprint: **reversing the direction drops
+  recall to 0.527** (AUC 0.972). Treat this as a cross-sub-campaign test, not
+  evidence of temporal robustness.
+- **`Fwd Seg Size Min` is a generation artifact.** Across all 380,949 attack
+  flows it takes exactly two values — 32.0 for every SSH-Bruteforce row, 40.0
+  for every FTP-BruteForce row — against 8/20 for 99.4% of benign traffic
+  (P(>26 | attack) = 1.0000, P(>26 | benign) = 0.0058). A feature constant per
+  attack tool across hundreds of thousands of flows is a scripted-generator
+  packet-size signature, not attacker tradecraft. Dropping it costs little
+  (recall 0.980); dropping the model's top-3 gain features costs more (0.743).
+  So the signal is distributed — but across several correlated features that are
+  all plausibly downstream of the same generation regularity.
+- **Negative controls pass — no pipeline bug.** Shuffling test labels scores at
+  chance (AUC 0.499), ruling out an index-based scoring leak. Shuffling only the
+  50 few-shot labels drops performance *below the plain 2017 baseline*
+  (AUC 0.729 vs 0.927), confirming the recovery genuinely depends on those
+  labels being correct.
+
+**What this supports claiming:** few-shot adaptation is the only fix that works
+across families — but on brute-force it measures 0.95 ± 0.10, on a family whose
+separability is largely a dataset-generation artifact, with no demonstrated
+temporal robustness. DoS (0.839) and Bot (0.993) are more representative; both
+are single-seed and inherit the same variance caveat until re-measured.
+
 None of the label-free methods is a general fix. CORAL and transfer-stable
 feature selection remain failures; the target-trained autoencoder can rank
 some attacks but cannot reliably clear a usable operating point. Quantile
 space is the one narrow exception: it recovers a seed-sensitive mean recall of
 0.502 on brute-force, then falls back to 0.033 on DoS and 0.001 on Bot. Only
-**few-shot** works consistently across all three families. In the previously
-audited brute-force run, 50 labelled target flows recovered 0.99997 recall on
-held-out traffic (exact, unrounded: 228,562 of 228,569 attacks alerted, 7
-missed; AUC 0.9999436 — earlier drafts printed these at 3 dp as "1.000",
-which oversold a near-perfect score as a perfect one).
+**few-shot** works consistently across all three families. On brute-force, 50 labelled
+target flows recover **0.948 ± 0.103** recall across 5 seeds. The figure this
+section used to headline (0.99997 — 228,562 of 228,569 attacks alerted, 7
+missed; AUC 0.9999436, seed 13) is the **best of those five**, not a typical
+run; one seed lands at 0.742. Earlier drafts printed it at 3 dp as "1.000",
+compounding the problem by presenting a seed-best near-perfect score as a
+stable perfect one.
 
 Why so clean? Not overfitting: FTP/SSH brute-force is intrinsically separable
 *once the model has in-domain labels*. The 2017->2018 failure is a
